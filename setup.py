@@ -28,6 +28,13 @@ setup(
     author="Christoph Sommer",
     author_email="christoph.sommer23@gmail.com",
     install_requires=[
+        "seaborn",
+        "matplotlib",
+        "tqdm",
+        "scikit-image",
+        "scipy",
+        "pandas",
+        "deeplabcut",
     ],
 )
 

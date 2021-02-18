@@ -30,6 +30,7 @@ def plot_parts(
     contour=False,
     scatter=True,
     lines=True,
+    bbox=(-150, 150, -300, 100),
 ):
     if ax is None:
         _, ax = plt.subplots()
@@ -41,10 +42,10 @@ def plot_parts(
         x, y = df[p][coords].to_numpy().T
 
         if scatter:
-            fmt = "."
-            if line:
-                fmt = ".-"
-            ax.plot(x, y, fmt, color=tadpole.bodypart_color[p], alpha=alpha)
+            ax.plot(x, y, ".", color=tadpole.bodypart_color[p], alpha=alpha)
+
+        if lines:
+            ax.plot(x, y, "-", color=tadpole.bodypart_color[p], alpha=alpha)
 
         if contour:
             sns.kdeplot(x=x, y=y, color=tadpole.bodypart_color[p], levels=5)
@@ -60,10 +61,10 @@ def plot_parts(
                 markeredgewidth=0.3,
             )
 
-    x1, x2, y1, y2 = -150, 150, -300, 100
+    x1, x2, y1, y2 = bbox
 
-    # ax.set_xlim(x1, x2)
-    # ax.set_ylim(y1, y2)
+    ax.set_xlim(x1, x2)
+    ax.set_ylim(y1, y2)
 
     ax.hlines(0, xmin=x1, xmax=x2, color="gray", linestyle=":")
     ax.vlines(0, ymin=y1, ymax=y2, color="gray", linestyle=":")

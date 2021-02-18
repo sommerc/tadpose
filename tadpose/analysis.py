@@ -22,8 +22,10 @@ from functools import reduce
 
 coords = ["x", "y"]
 
+
 def get_valid_alignment_idx(df, max_std=1):
     return numpy.abs(stats.zscore(df["Center"].y)) < max_std
+
 
 def get_valid_alignment_idx(df, max_std=1):
     return numpy.abs(stats.zscore(df["Center"].y)) < max_std
@@ -32,11 +34,9 @@ def get_valid_alignment_idx(df, max_std=1):
 def get_displacements(df, part, coords=("x", "y")):
     return (df[part][list(coords)].diff(1) ** 2).sum(1, skipna=False).apply(numpy.sqrt)
 
+
 def get_displacements(df, part, coords=("x", "y")):
     return (df[part][list(coords)].diff(1) ** 2).sum(1, skipna=False).apply(numpy.sqrt)
-
-
-
 
 
 def get_speed(df, part, coords=("x", "y"), per="frame"):
@@ -48,10 +48,7 @@ def get_speed(df, part, coords=("x", "y"), per="frame"):
 
 
 def get_angle(df_flt_tail, part1="TailTip", part2="TailCenter"):
-    v0 = (
-        df_flt_tail[part1][coords].to_numpy()
-        - df_flt_tail[part2][coords].to_numpy()
-    )
+    v0 = df_flt_tail[part1][coords].to_numpy() - df_flt_tail[part2][coords].to_numpy()
     v1 = df_flt_tail[part2][coords].to_numpy()
 
     v0 = v0 / numpy.linalg.norm(v0, axis=1)[:, None]
@@ -66,6 +63,7 @@ def filter_likelihood(df, parts, min_likelihood):
     sel = reduce(numpy.logical_and, [df[p].likelihood > min_likelihood for p in parts])
 
     return df[sel]
+
 
 def filter_misdetections_limbs(df, likelihood=0.01, max_displ=50):
     # by likelihood
@@ -112,5 +110,4 @@ def get_singed_angular_speed(Rs):
             )
         )
     )
-
 

@@ -1,11 +1,31 @@
 from . import alignment
 from . import analysis
 from . import visu
+from . import utils
 
 import numpy
 import pandas
 import matplotlib
 from functools import lru_cache
+
+
+def select_dlc_config(ext=".yaml"):
+    import os
+    import tkinter as tk
+    from tkinter import filedialog
+
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes("-topmost", True)
+
+    file_name = filedialog.askopenfilename(
+        defaultextension=ext, filetypes=[(f"{ext} files", f"*{ext}")], parent=root,
+    )
+    root.destroy()
+
+    if len(file_name) == 0: print("No DLC config file selected")
+
+    return file_name
 
 
 class Tadpole:

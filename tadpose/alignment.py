@@ -40,8 +40,6 @@ def mirror_df(in_df):
     return df
 
 
-
-
 class TadpoleAligner:
     def __init__(self, cfg, alignment_dict, scale=False):
         self.cfg = cfg
@@ -51,11 +49,6 @@ class TadpoleAligner:
         self.fps = 24.0
 
         self.Q = numpy.stack(list(alignment_dict.values()), axis=0)
-
-        colorclass = plt.cm.ScalarMappable(cmap="jet")
-        C = colorclass.to_rgba(np.linspace(0, 1, len(self.bodyparts)))
-        self.bodypart_colors = (C[:, :3] * 255).astype(np.uint8)
-        self.bodypart_color = dict([(k, v/255.) for k,v in zip(self.bodyparts, self.bodypart_colors)])
 
     def estimate_allign(self, df):
         n = df.shape[0]
@@ -134,9 +127,9 @@ class TadpoleAligner:
         # flip xy coords to ij, for image extraction
         image_trans_gray = map_coordinates(image[:, :, 0], sbb_coords[::-1, ...])
 
-        image_trans = np.repeat(
-            image_trans_gray[:, :, np.newaxis], 3, axis=2
-        ).astype("uint8")
+        image_trans = np.repeat(image_trans_gray[:, :, np.newaxis], 3, axis=2).astype(
+            "uint8"
+        )
 
         return image_trans
 
@@ -150,7 +143,8 @@ class TadpoleAligner:
         min_lh=0.33,
         trail_len=24,
         trail_parts=None,
-        dot_radius=5
+        dot_radius=5,
+        just_frames=False,
     ):
         n = len(df)
 
@@ -176,7 +170,9 @@ class TadpoleAligner:
             trans = self._get_transformation(c, R, T)
             image_trans = self._transform(image, trans, dbb_coords, dest_shape)
 
-            # assert numpy.allclose(ALIGN[i], trans(Ps))
+            if just_frames:
+                clip.save_frame(numpy.rot90(image_trans, k=2))
+                continue
 
             # paint axis
             image_trans[dest_offset[0], :, :] = 128
@@ -227,13 +223,7 @@ class TadpoleAligner:
         clip.close()
 
     def export_screenshots(
-        self,
-        df,
-        movie_in,
-        file_out,
-        frames,
-        dest_height=740,
-        dest_width=280,
+        self, df, movie_in, file_out, frames, dest_height=740, dest_width=280,
     ):
         n = len(df)
 
@@ -256,7 +246,6 @@ class TadpoleAligner:
             if i not in frames:
                 continue
 
-
             trans = self._get_transformation(c, R, T)
 
             image_trans = self._transform(image, trans, dbb_coords, dest_shape)
@@ -275,27 +264,46 @@ class TadpoleAligner:
             image_trans = numpy.rot90(image_trans, k=2)
             image_trans2 = numpy.rot90(image_trans2, k=2)
 
-
             # io.imsave(file_out + f"alligned_image_frame_{i:04d}_pred.png", image_trans)
 
-
             f, ax = plt.subplots()
-            ax.imshow(image_trans2, extent=[dest_width//2, -dest_width//2, -dest_height//2, dest_height//2])
-            ax.axhline(0, xmin=-dest_width//2, xmax=dest_width//2, color="white", linestyle=":" , linewidth=0.5)
-            ax.axvline(0, ymin=-dest_height//2, ymax=dest_height//2, color="white", linestyle=":", linewidth=0.5)
+            ax.imshow(
+                image_trans2,
+                extent=[
+                    dest_width // 2,
+                    -dest_width // 2,
+                    -dest_height // 2,
+                    dest_height // 2,
+                ],
+            )
+            ax.axhline(
+                0,
+                xmin=-dest_width // 2,
+                xmax=dest_width // 2,
+                color="white",
+                linestyle=":",
+                linewidth=0.5,
+            )
+            ax.axvline(
+                0,
+                ymin=-dest_height // 2,
+                ymax=dest_height // 2,
+                color="white",
+                linestyle=":",
+                linewidth=0.5,
+            )
 
             for ip, nP in enumerate(trans(Ps)):
-                ax.plot(nP[0], nP[1], ".", color=self.bodypart_colors[ip]/255.)
+                ax.plot(nP[0], nP[1], ".", color=self.bodypart_colors[ip] / 255.0)
 
             # ax.set_xticklabels([str(-int(xxx.get_text())) for xxx in ax.get_xticklabels()])
 
-
             sns.despine(ax=ax)
 
-            plt.savefig(file_out + f"alligned_image_frame_{i:04d}_with_axes.pdf", dpi=120)
+            plt.savefig(
+                file_out + f"alligned_image_frame_{i:04d}_with_axes.pdf", dpi=120
+            )
             plt.close(f)
-
-
 
         clip.vid.release()
 
@@ -328,7 +336,6 @@ def explort_aligned_movies(
         )
 
         ta.export_movie(df, mov_fn, out_fn, **kwargs)
-
 
 
 def umeyama(P, Q):
