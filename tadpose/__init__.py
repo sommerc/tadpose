@@ -3,6 +3,7 @@ from . import analysis
 from . import visu
 from . import utils
 
+import os
 import numpy
 import pandas
 import matplotlib
@@ -23,15 +24,21 @@ def select_dlc_config(ext=".yaml"):
     )
     root.destroy()
 
-    if len(file_name) == 0: print("No DLC config file selected")
+    if len(file_name) == 0:
+        print("No DLC config file selected")
 
     return file_name
 
 
 class Tadpole:
-    def __init__(self, path, vid_fn, scorer, dlc_config):
-        self.path = path
-        self.vid_fn = vid_fn
+    def __init__(self, video_fn, scorer, dlc_config):
+        assert os.path.exists(video_fn), f"Movie file '{video_fn}' does not exist"
+        self.video_fn = os.path.abspath(video_fn)
+
+        self.vid_path = os.path.dirname(video_fn)
+        self.vid_fn = os.path.basename(video_fn)
+        self.vid_fn, self.vid_ext = os.path.splitext(self.vid_fn)
+
         self.scorer = scorer
         self.dlc_config = dlc_config
 
@@ -57,7 +64,7 @@ class Tadpole:
     @property
     @lru_cache()
     def locations(self):
-        return pandas.read_hdf(f"{self.path}/{self.vid_fn}{self.scorer}.h5")[
+        return pandas.read_hdf(f"{self.vid_path}/{self.vid_fn}{self.scorer}.h5")[
             self.scorer
         ]
 
@@ -67,3 +74,14 @@ class Tadpole:
         Cs, Rs, Ts = self._aligner.estimate_allign(self.locations)
         return self.aligner.allign(self.locations, Cs, Rs, Ts)
 
+    def export_aligned_movie(
+        self, dest_height, dest_width, aligned_suffix="aligned", **kwargs
+    ):
+        self.aligner.export_movie(
+            self.locations,
+            self.video_fn,
+            f"{self.vid_path}/{self.vid_fn}{self.scorer}_{aligned_suffix}.mp4",
+            dest_height=dest_height,
+            dest_width=dest_width,
+            **kwargs,
+        )

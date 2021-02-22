@@ -12,6 +12,7 @@ from tqdm.auto import tqdm
 from skimage.draw import disk, line
 from skimage import transform as st
 from skimage import io
+import matplotlib
 from matplotlib import pyplot as plt
 import seaborn as sns
 
@@ -49,6 +50,13 @@ class TadpoleAligner:
         self.fps = 24.0
 
         self.Q = numpy.stack(list(alignment_dict.values()), axis=0)
+
+        colorclass = matplotlib.cm.ScalarMappable(cmap="jet")
+        C = colorclass.to_rgba(numpy.linspace(0, 1, len(self.bodyparts)))
+        self.bodypart_colors = (C[:, :3] * 255).astype(numpy.uint8)
+        self.bodypart_color = dict(
+            [(k, v / 255.0) for k, v in zip(self.bodyparts, self.bodypart_colors)]
+        )
 
     def estimate_allign(self, df):
         n = df.shape[0]
