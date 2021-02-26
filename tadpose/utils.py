@@ -1,4 +1,5 @@
 import os
+import numpy
 
 
 def outfile(main_path):
@@ -10,6 +11,14 @@ def outfile(main_path):
 
 
 from scipy.interpolate import interp1d
+
+
+def add_time_column(df, fps):
+    df = df.copy()
+    df["Time", "frame"] = list(df.index)
+    df["Time", "sec"] = df["Time", "frame"] / fps
+
+    return df
 
 
 def fill_missing(Y, kind="linear"):
@@ -26,16 +35,18 @@ def fill_missing(Y, kind="linear"):
         y = Y[:, i]
 
         # Build interpolant.
-        x = np.flatnonzero(~np.isnan(y))
-        f = interp1d(x, y[x], kind=kind, fill_value=np.nan, bounds_error=False)
+        x = numpy.flatnonzero(~numpy.isnan(y))
+        f = interp1d(x, y[x], kind=kind, fill_value=numpy.nan, bounds_error=False)
 
         # Fill missing
-        xq = np.flatnonzero(np.isnan(y))
+        xq = numpy.flatnonzero(numpy.isnan(y))
         y[xq] = f(xq)
 
         # Fill leading or trailing NaNs with the nearest non-NaN values
-        mask = np.isnan(y)
-        y[mask] = np.interp(np.flatnonzero(mask), np.flatnonzero(~mask), y[~mask])
+        mask = numpy.isnan(y)
+        y[mask] = numpy.interp(
+            numpy.flatnonzero(mask), numpy.flatnonzero(~mask), y[~mask]
+        )
 
         # Save slice
         Y[:, i] = y
@@ -59,12 +70,12 @@ def smooth_diff(node_loc, win=25, poly=3):
     to fit with
 
     """
-    node_loc_vel = np.zeros_like(node_loc)
+    node_loc_vel = numpy.zeros_like(node_loc)
 
     for c in range(node_loc.shape[-1]):
         node_loc_vel[:, c] = savgol_filter(node_loc[:, c], win, poly, deriv=1)
 
-    node_vel = np.linalg.norm(node_loc_vel, axis=1)
+    node_vel = numpy.linalg.norm(node_loc_vel, axis=1)
 
     return node_vel
 
@@ -83,4 +94,4 @@ def corr_roll(datax, datay, win):
     s1 = pd.Series(datax)
     s2 = pd.Series(datay)
 
-    return np.array(s2.rolling(win).corr(s1))
+    return numpy.array(s2.rolling(win).corr(s1))

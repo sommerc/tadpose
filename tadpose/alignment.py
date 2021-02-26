@@ -5,8 +5,6 @@ import numpy
 
 np = numpy
 
-from deeplabcut.utils import read_config
-from deeplabcut.utils.video_processor import VideoProcessorCV as vp
 
 from tqdm.auto import tqdm
 from skimage.draw import disk, line
@@ -22,14 +20,16 @@ from scipy.ndimage import map_coordinates
 coords = ["x", "y"]
 
 
-def add_time_column(df, fps=24):
-    df["Time", "frame"] = list(df.index)
-    df["Time", "sec"] = df["Time", "frame"] / fps
-
-
 def mirror_df(in_df):
     df = in_df.copy()
-    for bp in ["Eye", "Limb"]:
+
+    cols_to_mirror = [
+        bp[:-1]
+        for bp in list(in_df.columns.get_level_values(0).unique())
+        if bp.endswith("R")
+    ]
+
+    for bp in cols_to_mirror:
         tmp = df[f"{bp}L"].copy()
         df[f"{bp}L"] = df[f"{bp}R"]
         df[f"{bp}R"] = tmp
@@ -42,25 +42,21 @@ def mirror_df(in_df):
 
 
 class TadpoleAligner:
-    def __init__(self, cfg, alignment_dict, scale=False):
-        self.cfg = cfg
-        self.bodyparts = list(cfg["bodyparts"])
+    def __init__(self, alignment_dict, scale=False):
+
         self.alignment_dict = alignment_dict
         self.scale = scale
         self.fps = 24.0
 
         self.Q = numpy.stack(list(alignment_dict.values()), axis=0)
 
-        colorclass = matplotlib.cm.ScalarMappable(cmap="jet")
-        C = colorclass.to_rgba(numpy.linspace(0, 1, len(self.bodyparts)))
-        self.bodypart_colors = (C[:, :3] * 255).astype(numpy.uint8)
-        self.bodypart_color = dict(
-            [(k, v / 255.0) for k, v in zip(self.bodyparts, self.bodypart_colors)]
-        )
+    def align(self, tadole):
+        Cs, Rs, Ts = self.estimate_alignment(tadole)
+        return self.do_alignment(tadole, Cs, Rs, Ts)
 
-    def estimate_allign(self, df):
+    def estimate_alignment(self, tadole):
+        df = tadole.locations
         n = df.shape[0]
-        bodyparts = self.cfg["bodyparts"]
 
         Ps = (
             df[list(self.alignment_dict.keys())]
@@ -75,9 +71,10 @@ class TadpoleAligner:
 
         return Cs, Rs, Ts
 
-    def allign(self, df, Cs, Rs, Ts):
-        parts = self.get_detection_points(df)
-        part_probs = self.get_detection_probs(df)
+    def do_alignment(self, tadpole, Cs, Rs, Ts):
+        df = tadpole.locations
+
+        parts, part_probs = tadpole.split_detection_and_likelihood()
 
         parts_aligned = ((parts @ Rs).T).T + (Ts[:, None, :].T / Cs).T
 
@@ -88,22 +85,17 @@ class TadpoleAligner:
         )
         df_aligned.columns = df.columns
 
-        add_time_column(df, self.fps)
-        add_time_column(df_aligned, self.fps)
-
-        # insert time column
-
         return df_aligned
 
-    def get_detection_points(self, df):
-        return (
-            df[self.bodyparts].to_numpy().reshape(-1, len(self.bodyparts), 3)[:, :, :2]
-        )
+    # def get_detection_points(self, df):
+    #     return (
+    #         df[self.bodyparts].to_numpy().reshape(-1, len(self.bodyparts), 3)[:, :, :2]
+    #     )
 
-    def get_detection_probs(self, df):
-        return (
-            df[self.bodyparts].to_numpy().reshape(-1, len(self.bodyparts), 3)[:, :, 2]
-        )
+    # def get_detection_probs(self, df):
+    #     return (
+    #         df[self.bodyparts].to_numpy().reshape(-1, len(self.bodyparts), 3)[:, :, 2]
+    #     )
 
     def _destination_bb(self, dest_height, dest_width):
         dest_shape = numpy.array([dest_height, dest_width])
@@ -143,7 +135,7 @@ class TadpoleAligner:
 
     def export_movie(
         self,
-        df,
+        tadpole,
         movie_in,
         movie_out,
         dest_height=740,
@@ -154,14 +146,14 @@ class TadpoleAligner:
         dot_radius=5,
         just_frames=False,
     ):
+        df = tadpole.aligned_locations
         n = len(df)
 
         Cs, Rs, Ts = self.estimate_allign(df)
 
         df_aligned = self.allign(df, Cs, Rs, Ts)
 
-        parts_to_trans = self.get_detection_points(df)
-        part_probs = self.get_detection_probs(df)
+        parts_to_trans, part_probs = tadpole.split_detection_and_likelihood()
 
         clip = vp(movie_in, movie_out, codec="mp4v", sw=dest_width, sh=dest_height)
 
@@ -231,12 +223,12 @@ class TadpoleAligner:
         clip.close()
 
     def export_screenshots(
-        self, df, movie_in, file_out, frames, dest_height=740, dest_width=280,
+        self, tadpole, movie_in, file_out, frames, dest_height=740, dest_width=280,
     ):
+        df = tadpole.locations
         n = len(df)
 
-        Cs, Rs, Ts = self.estimate_allign(df)
-        df_aligned = self.allign(df, Cs, Rs, Ts)
+        Cs, Rs, Ts = self.estimate_alignment(df)
 
         clip = vp(movie_in, "", codec="mp4v", sw=dest_width, sh=dest_height)
 
@@ -245,7 +237,7 @@ class TadpoleAligner:
 
         dbb_coords = self._destination_bb(dest_height, dest_width)
 
-        parts_to_trans = self.get_detection_points(df)
+        parts_to_trans, _ = tadpole.split_detection_and_likelihood()
 
         plt.ioff()
 
@@ -316,34 +308,36 @@ class TadpoleAligner:
         clip.vid.release()
 
 
-def explort_aligned_movies(
-    path_config_file,
-    orig_movies,
-    scorer,
-    out_suffix="aligned",
-    overwrite=False,
-    **kwargs,
-):
-    cfg = read_config(path_config_file)
-    bodyparts = cfg["bodyparts"]
+# def explort_aligned_movies(
+#     path_config_file,
+#     orig_movies,
+#     scorer,
+#     out_suffix="aligned",
+#     overwrite=False,
+#     **kwargs,
+# ):
+#     from deeplabcut.utils import read_config
+#     from deeplabcut.utils.video_processor import VideoProcessorCV as vp
+#     cfg = read_config(path_config_file)
+#     bodyparts = cfg["bodyparts"]
 
-    for mov_fn in tqdm(orig_movies):
-        print(mov_fn)
-        mov_base_fn = os.path.splitext(mov_fn)[0]
+#     for mov_fn in tqdm(orig_movies):
+#         print(mov_fn)
+#         mov_base_fn = os.path.splitext(mov_fn)[0]
 
-        out_fn = f"{mov_base_fn}{scorer}_{out_suffix}.mp4"
+#         out_fn = f"{mov_base_fn}{scorer}_{out_suffix}.mp4"
 
-        if os.path.exists(out_fn) and not overwrite:
-            print("already there... skipping (use overwrite=True) to overwrite")
-            continue
+#         if os.path.exists(out_fn) and not overwrite:
+#             print("already there... skipping (use overwrite=True) to overwrite")
+#             continue
 
-        df = pandas.read_hdf(f"{mov_base_fn}{scorer}.h5")
-        df = df[scorer]
-        ta = TadpoleAligner(
-            cfg, {"TailStem": numpy.array([0, 0.0]), "Center": numpy.array([0, 1.0])}
-        )
+#         df = pandas.read_hdf(f"{mov_base_fn}{scorer}.h5")
+#         df = df[scorer]
+#         ta = TadpoleAligner(
+#             cfg, {"TailStem": numpy.array([0, 0.0]), "Center": numpy.array([0, 1.0])}
+#         )
 
-        ta.export_movie(df, mov_fn, out_fn, **kwargs)
+#         ta.export_movie(df, mov_fn, out_fn, **kwargs)
 
 
 def umeyama(P, Q):

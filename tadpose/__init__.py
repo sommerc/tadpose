@@ -1,16 +1,17 @@
-from . import alignment
-from . import analysis
-from . import visu
-from . import utils
-
 import os
+import h5py
 import numpy
 import pandas
 import matplotlib
 from functools import lru_cache
 
+from . import alignment
+from . import analysis
+from . import visu
+from . import utils
 
-def select_dlc_config(ext=".yaml"):
+
+def file_select_dialog(ext=".yaml"):
     import os
     import tkinter as tk
     from tkinter import filedialog
@@ -30,28 +31,62 @@ def select_dlc_config(ext=".yaml"):
     return file_name
 
 
-class Tadpole:
-    def __init__(self, video_fn, scorer, dlc_config):
-        assert os.path.exists(video_fn), f"Movie file '{video_fn}' does not exist"
-        self.video_fn = os.path.abspath(video_fn)
+class TadpoleAnalysis:
+    BACKENDS = ["deeplabcut", "sleap"]
 
+    def __init__(self, backend):
+        if backend not in self.BACKENDS:
+            raise RuntimeError(
+                f"Backend '{backend}' not supported. Valid backands are {BACKENDS}"
+            )
+        self.backend = backend
+
+    def __call__(self, *args, **kwargs):
+        if self.backend == "deeplabcut":
+            return DeeplabcutTadpole(*args, **kwargs)
+        if self.backend == "sleap":
+            return SleapTadpole(*args, **kwargs)
+
+
+class Tadpole:
+    def __init__(self, video_fn, bodyparts, bodyparts_cmap="jet"):
+        assert os.path.exists(video_fn), f"Movie file '{video_fn}' does not exist"
+
+        self.video_fn = os.path.abspath(video_fn)
         self.vid_path = os.path.dirname(video_fn)
         self.vid_fn = os.path.basename(video_fn)
         self.vid_fn, self.vid_ext = os.path.splitext(self.vid_fn)
 
-        self.scorer = scorer
-        self.dlc_config = dlc_config
+        self.bodyparts_cmap = bodyparts_cmap
+        self._aligner = None
 
-        self.bodyparts = dlc_config["bodyparts"]
+    @property
+    def analysis_file(self):
+        pass
 
-        colorclass = matplotlib.cm.ScalarMappable(cmap="jet")
+    def split_detection_and_likelihood(self):
+        tmp = (
+            self.locations[self.bodyparts]
+            .to_numpy()
+            .reshape(-1, len(self.bodyparts), 3)
+        )
+        return tmp[..., :2], tmp[..., 2]
+
+    @property
+    def bodyparts(self):
+        pass
+
+    @property
+    def bodypart_colors(self):
+        colorclass = matplotlib.cm.ScalarMappable(cmap=self.bodyparts_cmap)
         C = colorclass.to_rgba(numpy.linspace(0, 1, len(self.bodyparts)))
-        self.bodypart_colors = (C[:, :3] * 255).astype(numpy.uint8)
-        self.bodypart_color = dict(
+        return (C[:, :3] * 255).astype(numpy.uint8)
+
+    @property
+    def bodypart_color(self):
+        return dict(
             [(k, v / 255.0) for k, v in zip(self.bodyparts, self.bodypart_colors)]
         )
-
-        self.aligner = None
 
     @property
     def aligner(self):
@@ -63,16 +98,8 @@ class Tadpole:
 
     @property
     @lru_cache()
-    def locations(self):
-        return pandas.read_hdf(f"{self.vid_path}/{self.vid_fn}{self.scorer}.h5")[
-            self.scorer
-        ]
-
-    @property
-    @lru_cache()
     def aligned_locations(self):
-        Cs, Rs, Ts = self._aligner.estimate_allign(self.locations)
-        return self.aligner.allign(self.locations, Cs, Rs, Ts)
+        return self._aligner.align(self)
 
     def export_aligned_movie(
         self, dest_height, dest_width, aligned_suffix="aligned", **kwargs
@@ -85,3 +112,59 @@ class Tadpole:
             dest_width=dest_width,
             **kwargs,
         )
+
+
+class SleapTadpole(Tadpole):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args)
+
+    @property
+    @lru_cache()
+    def locations(self):
+        with h5py.File(self.analysis_file, "r") as hf:
+            tracks = hf["tracks"][:].T
+            liklihoods = 1.0 - numpy.isnan(tracks[:, :, 0, 0])
+
+            tracks = utils.fill_missing(tracks)[..., 0]
+
+            parts = self.bodyparts
+            coords = ["x", "y", "likelihood"]
+
+            liklihoods = liklihoods[..., None]
+
+            tracks = numpy.concatenate([tracks, liklihoods], axis=2)
+            df = pandas.DataFrame(tracks.reshape(len(tracks), -1))
+            df.columns = pandas.MultiIndex.from_product([parts, coords])
+
+            return df
+
+    @property
+    def analysis_file(self):
+        return f"{self.video_fn}.predictions.analysis.h5"
+
+    @property
+    @lru_cache()
+    def bodyparts(self):
+        with h5py.File(self.analysis_file, "r") as hf:
+            return list(map(lambda x: x.decode(), hf["node_names"]))
+
+
+class DeeplabcutTadpole(Tadpole):
+    def __init__(self, *args, scorer, **kwargs):
+        super().__init__(*args)
+        self.scorer = scorer
+
+    @property
+    @lru_cache()
+    def locations(self):
+        return pandas.read_hdf(self.analysis_file)[self.scorer]
+
+    @property
+    @lru_cache()
+    def bodyparts(self):
+        return self.locations.columns.get_level_values(0).unique().tolist()
+
+    @property
+    def analysis_file(self):
+        return f"{self.vid_path}/{self.vid_fn}{self.scorer}.h5"
+

@@ -5,8 +5,6 @@ import numpy
 
 np = numpy
 
-from deeplabcut.utils import read_config
-from deeplabcut.utils.video_processor import VideoProcessorCV as vp
 
 from tqdm.auto import tqdm
 from skimage.draw import disk, line
