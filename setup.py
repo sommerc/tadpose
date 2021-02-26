@@ -34,7 +34,6 @@ setup(
         "scikit-image",
         "scipy",
         "pandas",
-        "deeplabcut",
     ],
 )
 
