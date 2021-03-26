@@ -7,7 +7,7 @@ np = numpy
 
 
 from tqdm.auto import tqdm
-from skimage.draw import disk, line
+from skimage.draw import disk, line, line_aa
 from skimage import transform as st
 from skimage import io
 import matplotlib
@@ -145,13 +145,18 @@ class TadpoleAligner:
         trail_parts=None,
         dot_radius=5,
         just_frames=False,
+        parts=None,
+        skeletons=None,
+        skeleton_colors=None,
     ):
+        from .utils import VideoProcessorCV as vp
+
         df = tadpole.aligned_locations
         n = len(df)
 
-        Cs, Rs, Ts = self.estimate_allign(df)
+        Cs, Rs, Ts = self.estimate_alignment(tadpole)
 
-        df_aligned = self.allign(df, Cs, Rs, Ts)
+        df_aligned = self.do_alignment(tadpole, Cs, Rs, Ts)
 
         parts_to_trans, part_probs = tadpole.split_detection_and_likelihood()
 
@@ -183,11 +188,12 @@ class TadpoleAligner:
             end_trail = i
 
             if trail_parts is None:
-                trail_parts = self.bodyparts
-                trail_colors = self.bodypart_colors
+                trail_parts = tadpole.bodyparts
+                trail_colors = tadpole.bodypart_colors
             else:
                 trail_colors = [
-                    self.bodypart_colors[self.bodyparts.index(tp)] for tp in trail_parts
+                    tadpole.bodypart_colors[tadpole.bodyparts.index(tp)]
+                    for tp in trail_parts
                 ]
 
             for bp, bc in zip(trail_parts, trail_colors):
@@ -206,106 +212,141 @@ class TadpoleAligner:
                     rr, cc = line(int(row1.y), int(row1.x), int(row2.y), int(row2.x))
                     image_trans[rr, cc, :] = bc
 
-            # paint current detection
-            for ip, (nP, lh) in enumerate(zip(trans(Ps), Plh)):
+            if parts is None:
+                parts = tadpole.bodyparts
 
+            # paint skeletons
+            aligned_locs = trans(Ps)
+            parts_idx = dict([(p, i) for i, p in enumerate(tadpole.bodyparts)])
+
+            if skeletons is not None:
+                if skeleton_colors is None:
+                    skeleton_colors = dict(
+                        [
+                            (i, tadpole.bodypart_color[skel[-1]])
+                            for (i, skel) in enumerate(skeletons)
+                        ]
+                    )
+                for skel_i, skel in enumerate(skeletons):
+                    for pair in zip(skel, skel[1:]):
+                        p1 = parts_idx[pair[0]]
+                        p2 = parts_idx[pair[1]]
+                        if (Plh[p1] > min_lh) and (Plh[p2] > min_lh):
+                            nP1 = (aligned_locs[p1] + dest_offset[::-1] + 0.5).astype(
+                                "int32"
+                            )
+                            nP2 = (aligned_locs[p2] + dest_offset[::-1] + 0.5).astype(
+                                "int32"
+                            )
+                            rr, cc, val = line_aa(
+                                int(np.clip(nP1[1], 0, dest_height - 1)),
+                                int(np.clip(nP1[0], 0, dest_width - 1)),
+                                int(np.clip(nP2[1], 1, dest_height - 1)),
+                                int(np.clip(nP2[0], 1, dest_width - 1)),
+                            )
+                            image_trans[rr, cc, :] = skeleton_colors[skel_i] * 255.0
+
+            # paint current detection
+
+            for ip, (nP, lh) in enumerate(zip(aligned_locs, Plh)):
                 # flip dest_offset into xy
-                if lh > min_lh:
+                if lh > min_lh and tadpole.bodyparts[ip] in parts:
                     nP = (nP + dest_offset[::-1] + 0.5).astype("int32")
                     rr, cc = disk((nP[1], nP[0]), dot_radius, shape=dest_shape)
-                    image_trans[rr, cc, :] = self.bodypart_colors[ip]
+                    image_trans[rr, cc, :] = tadpole.bodypart_colors[ip]
 
             clip.save_frame(numpy.rot90(image_trans, k=2))
 
-            # if i > 300:
+            # if i > 200:
             #     break
 
         clip.close()
 
-    def export_screenshots(
-        self, tadpole, movie_in, file_out, frames, dest_height=740, dest_width=280,
-    ):
-        df = tadpole.locations
-        n = len(df)
+    # def export_screenshots(
+    #     self, tadpole, movie_in, file_out, frames, dest_height=740, dest_width=280,
+    # ):
+    #     df = tadpole.locations
+    #     n = len(df)
 
-        Cs, Rs, Ts = self.estimate_alignment(df)
+    #     Cs, Rs, Ts = self.estimate_alignment(df)
 
-        clip = vp(movie_in, "", codec="mp4v", sw=dest_width, sh=dest_height)
+    #     clip = vp(movie_in, "", codec="mp4v", sw=dest_width, sh=dest_height)
 
-        dest_shape = numpy.array([dest_height, dest_width])
-        dest_offset = dest_shape // 2
+    #     dest_shape = numpy.array([dest_height, dest_width])
+    #     dest_offset = dest_shape // 2
 
-        dbb_coords = self._destination_bb(dest_height, dest_width)
+    #     dbb_coords = self._destination_bb(dest_height, dest_width)
 
-        parts_to_trans, _ = tadpole.split_detection_and_likelihood()
+    #     parts_to_trans, _ = tadpole.split_detection_and_likelihood()
 
-        plt.ioff()
+    #     plt.ioff()
 
-        for i, (c, R, T, Ps) in enumerate(zip(Cs, Rs, Ts, parts_to_trans)):
-            image = clip.load_frame()
-            if i not in frames:
-                continue
+    #     for i, (c, R, T, Ps) in enumerate(zip(Cs, Rs, Ts, parts_to_trans)):
+    #         image = clip.load_frame()
+    #         if i not in frames:
+    #             continue
 
-            trans = self._get_transformation(c, R, T)
+    #         trans = self._get_transformation(c, R, T)
 
-            image_trans = self._transform(image, trans, dbb_coords, dest_shape)
-            image_trans2 = image_trans.copy()
+    #         image_trans = self._transform(image, trans, dbb_coords, dest_shape)
+    #         image_trans2 = image_trans.copy()
 
-            # io.imsave(file_out + f"image_frame_{i:04d}.png", numpy.rot90(image_trans, k=2))
+    #         # io.imsave(file_out + f"image_frame_{i:04d}.png", numpy.rot90(image_trans, k=2))
 
-            # paint current detection
-            for ip, nP in enumerate(trans(Ps)):
+    #         # paint current detection
+    #         for ip, nP in enumerate(trans(Ps)):
 
-                # flip dest_offset into xy
-                nP = (nP + dest_offset[::-1] + 0.5).astype("int32")
-                rr, cc = disk((nP[1], nP[0]), 8, shape=dest_shape)
-                image_trans[rr, cc, :] = self.bodypart_colors[ip]
+    #             # flip dest_offset into xy
+    #             nP = (nP + dest_offset[::-1] + 0.5).astype("int32")
+    #             rr, cc = disk((nP[1], nP[0]), 8, shape=dest_shape)
+    #             image_trans[rr, cc, :] = tadpole.bodypart_colors[ip]
 
-            image_trans = numpy.rot90(image_trans, k=2)
-            image_trans2 = numpy.rot90(image_trans2, k=2)
+    #         image_trans = numpy.rot90(image_trans, k=2)
+    #         image_trans2 = numpy.rot90(image_trans2, k=2)
 
-            # io.imsave(file_out + f"alligned_image_frame_{i:04d}_pred.png", image_trans)
+    #         # io.imsave(file_out + f"alligned_image_frame_{i:04d}_pred.png", image_trans)
 
-            f, ax = plt.subplots()
-            ax.imshow(
-                image_trans2,
-                extent=[
-                    dest_width // 2,
-                    -dest_width // 2,
-                    -dest_height // 2,
-                    dest_height // 2,
-                ],
-            )
-            ax.axhline(
-                0,
-                xmin=-dest_width // 2,
-                xmax=dest_width // 2,
-                color="white",
-                linestyle=":",
-                linewidth=0.5,
-            )
-            ax.axvline(
-                0,
-                ymin=-dest_height // 2,
-                ymax=dest_height // 2,
-                color="white",
-                linestyle=":",
-                linewidth=0.5,
-            )
+    #         f, ax = plt.subplots()
+    #         ax.imshow(
+    #             image_trans2,
+    #             extent=[
+    #                 dest_width // 2,
+    #                 -dest_width // 2,
+    #                 -dest_height // 2,
+    #                 dest_height // 2,
+    #             ],
+    #         )
+    #         ax.axhline(
+    #             0,
+    #             xmin=-dest_width // 2,
+    #             xmax=dest_width // 2,
+    #             color="white",
+    #             linestyle=":",
+    #             linewidth=0.5,
+    #         )
+    #         ax.axvline(
+    #             0,
+    #             ymin=-dest_height // 2,
+    #             ymax=dest_height // 2,
+    #             color="white",
+    #             linestyle=":",
+    #             linewidth=0.5,
+    #         )
 
-            for ip, nP in enumerate(trans(Ps)):
-                ax.plot(nP[0], nP[1], ".", color=self.bodypart_colors[ip] / 255.0)
+    #         aligned_locs = trans(Ps)
+    #         for ip, nP in enumerate(aligned_locs):
+    #             ax.plot(nP[0], nP[1], ".", color=tadpole.bodypart_colors[ip] / 255.0)
 
-            # ax.set_xticklabels([str(-int(xxx.get_text())) for xxx in ax.get_xticklabels()])
+    #         # ax.set_xticklabels([str(-int(xxx.get_text())) for xxx in ax.get_xticklabels()])
 
-            sns.despine(ax=ax)
+    #         sns.despine(ax=ax)
 
-            plt.savefig(
-                file_out + f"alligned_image_frame_{i:04d}_with_axes.pdf", dpi=120
-            )
-            plt.close(f)
+    #         plt.savefig(
+    #             file_out + f"alligned_image_frame_{i:04d}_with_axes.pdf", dpi=120
+    #         )
+    #         plt.close(f)
 
-        clip.vid.release()
+    #     clip.vid.release()
 
 
 # def explort_aligned_movies(
