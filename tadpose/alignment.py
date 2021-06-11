@@ -87,16 +87,6 @@ class TadpoleAligner:
 
         return df_aligned
 
-    # def get_detection_points(self, df):
-    #     return (
-    #         df[self.bodyparts].to_numpy().reshape(-1, len(self.bodyparts), 3)[:, :, :2]
-    #     )
-
-    # def get_detection_probs(self, df):
-    #     return (
-    #         df[self.bodyparts].to_numpy().reshape(-1, len(self.bodyparts), 3)[:, :, 2]
-    #     )
-
     def _destination_bb(self, dest_height, dest_width):
         dest_shape = numpy.array([dest_height, dest_width])
 
@@ -121,15 +111,24 @@ class TadpoleAligner:
         trans = st.EuclideanTransform(matrix=hom)
         return trans
 
-    def _transform(self, image, trans, dbb_coords, dest_shape):
+    def _transform(self, image, trans, dbb_coords, dest_shape, rgb=False):
         sbb_coords = trans.inverse(dbb_coords).T.reshape(2, *dest_shape)
 
         # flip xy coords to ij, for image extraction
-        image_trans_gray = map_coordinates(image[:, :, 0], sbb_coords[::-1, ...])
+        if not rgb:
+            image_trans_gray = map_coordinates(image[:, :, 0], sbb_coords[::-1, ...])
 
-        image_trans = np.repeat(image_trans_gray[:, :, np.newaxis], 3, axis=2).astype(
-            "uint8"
-        )
+            image_trans = np.repeat(
+                image_trans_gray[:, :, np.newaxis], 3, axis=2
+            ).astype("uint8")
+        else:
+            image_trans = numpy.stack(
+                [
+                    map_coordinates(image[:, :, c], sbb_coords[::-1, ...])
+                    for c in range(3)
+                ],
+                axis=2,
+            )
 
         return image_trans
 
@@ -148,6 +147,7 @@ class TadpoleAligner:
         parts=None,
         skeletons=None,
         skeleton_colors=None,
+        rgb=False,
     ):
         from .utils import VideoProcessorCV as vp
 
@@ -173,7 +173,7 @@ class TadpoleAligner:
             image = clip.load_frame()
 
             trans = self._get_transformation(c, R, T)
-            image_trans = self._transform(image, trans, dbb_coords, dest_shape)
+            image_trans = self._transform(image, trans, dbb_coords, dest_shape, rgb)
 
             if just_frames:
                 clip.save_frame(numpy.rot90(image_trans, k=2))

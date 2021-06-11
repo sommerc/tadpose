@@ -48,6 +48,76 @@ class TadpoleFactory:
             return Tadpole.from_sleap(*args, **kwargs)
 
 
+# class SleapMultiTracks:
+#     def __init__(self, analysis_fn, video_fn, bodyparts_cmap):
+#         assert os.path.exists(video_fn), f"Movie file '{video_fn}' does not exist"
+#         assert os.path.exists(
+#             analysis_fn
+#         ), f"Analysis file '{analysis_fn}' does not exist "
+
+#         self.analysis_file = analysis_fn
+#         self.video_fn = os.path.abspath(video_fn)
+#         self.vid_path = os.path.dirname(video_fn)
+#         self.vid_fn = os.path.basename(video_fn)
+#         self.vid_fn, self.vid_ext = os.path.splitext(self.vid_fn)
+
+#         self.bodyparts_cmap = bodyparts_cmap
+#         self._aligner = None
+
+#         with h5py.File(self.analysis_file, "r") as hf:
+#             self.tracks = hf["tracks"][:].T
+#             self.bodyparts = list(map(lambda x: x.decode(), hf["node_names"]))
+
+#         self.current_track = 0
+
+#     def __len__(self):
+#         return self.tracks.shape[-1]
+
+#     def __getitem__(self, track_idx):
+#         assert track_idx < len(self), "track does not exist, go away"
+#         tracks = utils.fill_missing(self.tracks)[..., track_idx]
+#         liklihoods = 1.0 - numpy.isnan(self.tracks[:, :, 0, track_idx])
+
+#         coords = ["x", "y", "likelihood"]
+
+#         liklihoods = liklihoods[..., None]
+
+#         tracks = numpy.concatenate([tracks, liklihoods], axis=2)
+#         df = pandas.DataFrame(tracks.reshape(len(tracks), -1))
+#         df.columns = pandas.MultiIndex.from_product([self.bodyparts, coords])
+
+#         return df
+
+#     @property
+#     def bodyparts(self):
+#         pass
+
+#     @property
+#     def bodypart_colors(self):
+#         colorclass = matplotlib.cm.ScalarMappable(cmap=self.bodyparts_cmap)
+#         C = colorclass.to_rgba(numpy.linspace(0, 1, len(self.bodyparts)))
+#         return (C[:, :3] * 255).astype(numpy.uint8)
+
+#     @property
+#     def bodypart_color(self):
+#         return dict(
+#             [(k, v / 255.0) for k, v in zip(self.bodyparts, self.bodypart_colors)]
+#         )
+
+#     @property
+#     def aligner(self):
+#         return self._aligner
+
+#     @aligner.setter
+#     def aligner(self, ta):
+#         self._aligner = ta
+
+#     @property
+#     @lru_cache()
+#     def aligned_locations(self):
+#         return self._aligner.align(self)
+
+
 class Tadpole:
     def __init__(self, video_fn, bodyparts_cmap):
         assert os.path.exists(video_fn), f"Movie file '{video_fn}' does not exist"
@@ -86,6 +156,14 @@ class Tadpole:
     def bodyparts(self):
         pass
 
+    @bodyparts.setter
+    def bodyparts(self, bodyparts):
+        self._bodyparts = bodyparts
+
+    @bodyparts.getter
+    def bodyparts(self):
+        return self._bodyparts
+
     @property
     def bodypart_colors(self):
         colorclass = matplotlib.cm.ScalarMappable(cmap=self.bodyparts_cmap)
@@ -107,7 +185,7 @@ class Tadpole:
         self._aligner = ta
 
     @property
-    @lru_cache()
+    @lru_cache()  ### TOTO proper cache for multi-animal
     def aligned_locations(self):
         return self._aligner.align(self)
 
@@ -129,37 +207,68 @@ class Tadpole:
 class SleapTadpole(Tadpole):
     def __init__(self, video_fn, bodyparts_cmap, **kwargs):
         super().__init__(video_fn, bodyparts_cmap)
-        self.scorer = None
+        self.scorer = ""
+
+        with h5py.File(self.analysis_file, "r") as hf:
+            self.tracks = hf["tracks"][:].T
+            self.bodyparts = list(map(lambda x: x.decode(), hf["node_names"]))
+
+        self.current_track = 0
+
+    def __len__(self):
+        return self.tracks.shape[-1]
+
+    @lru_cache()
+    def __getitem__(self, track_idx):
+        assert track_idx < len(self), "track does not exist, go away"
+        tracks = self.tracks[..., track_idx]
+        liklihoods = 1.0 - numpy.isnan(self.tracks[:, :, 0, track_idx])
+
+        coords = ["x", "y", "likelihood"]
+
+        liklihoods = liklihoods[..., None]
+
+        tracks = numpy.concatenate([tracks, liklihoods], axis=2)
+        df = pandas.DataFrame(tracks.reshape(len(tracks), -1))
+        df.columns = pandas.MultiIndex.from_product([self.bodyparts, coords])
+
+        return df
 
     @property
-    @lru_cache()
     def locations(self):
-        with h5py.File(self.analysis_file, "r") as hf:
-            tracks = hf["tracks"][:].T
-            liklihoods = 1.0 - numpy.isnan(tracks[:, :, 0, 0])
+        tracks = self.tracks
+        liklihoods = 1.0 - numpy.isnan(tracks[:, :, 0, self.current_track])
 
-            tracks = utils.fill_missing(tracks)[..., 0]
+        tracks = tracks[..., self.current_track]
 
-            parts = self.bodyparts
-            coords = ["x", "y", "likelihood"]
+        parts = self.bodyparts
+        coords = ["x", "y", "likelihood"]
 
-            liklihoods = liklihoods[..., None]
+        liklihoods = liklihoods[..., None]
 
-            tracks = numpy.concatenate([tracks, liklihoods], axis=2)
-            df = pandas.DataFrame(tracks.reshape(len(tracks), -1))
-            df.columns = pandas.MultiIndex.from_product([parts, coords])
+        tracks = numpy.concatenate([tracks, liklihoods], axis=2)
+        df = pandas.DataFrame(tracks.reshape(len(tracks), -1))
+        df.columns = pandas.MultiIndex.from_product([parts, coords])
 
-            return df
+        return df
 
     @property
     def analysis_file(self):
         return f"{self.video_fn}.predictions.analysis.h5"
 
-    @property
-    @lru_cache()
-    def bodyparts(self):
-        with h5py.File(self.analysis_file, "r") as hf:
-            return list(map(lambda x: x.decode(), hf["node_names"]))
+    def export_aligned_movie(
+        self, dest_height, dest_width, aligned_suffix="aligned", **kwargs
+    ):
+        out_mov = f"{self.vid_path}/{self.vid_fn}_{self.current_track:02}_{aligned_suffix}.mp4"
+        print(f"Export to: {out_mov}")
+        self.aligner.export_movie(
+            self,
+            self.video_fn,
+            out_mov,
+            dest_height=dest_height,
+            dest_width=dest_width,
+            **kwargs,
+        )
 
 
 class DeeplabcutTadpole(Tadpole):
