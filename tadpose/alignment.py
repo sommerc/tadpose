@@ -56,10 +56,10 @@ class TadpoleAligner:
 
     def estimate_alignment(self, tadpole, frame=None):
         if frame is None:
-            df = tadpole.locations[frame:frame]
+            df = tadpole.locations
 
         else:
-            df = tadpole.locations
+            df = tadpole.locations.loc[frame:frame]
         n = df.shape[0]
 
         Ps = (

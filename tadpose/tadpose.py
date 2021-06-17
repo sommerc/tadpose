@@ -1,4 +1,5 @@
 import os
+import cv2
 import h5py
 import numpy
 import pandas
@@ -130,6 +131,8 @@ class Tadpole:
         self.bodyparts_cmap = bodyparts_cmap
         self._aligner = None
 
+        self._vid_handle = None
+
     @staticmethod
     def from_dlc(video_fn, scorer, bodyparts_cmap="jet"):
         return DeeplabcutTadpole(
@@ -202,6 +205,26 @@ class Tadpole:
             dest_width=dest_width,
             **kwargs,
         )
+
+    @lru_cache()
+    def aligned_image(self, frame, dest_height=100, dest_width=100, rgb=False):
+        Cs, Rs, Ts = self.aligner.estimate_alignment(self, frame=frame)
+        trans = self.aligner._get_transformation(Cs[0], Rs[0], Ts[0])
+
+        if not self._vid_handle:
+            self._vid_handle = cv2.VideoCapture(self.video_fn)
+
+        self._vid_handle.set(cv2.cv2.CAP_PROP_POS_FRAMES, frame)
+        res, in_img = self._vid_handle.read()
+
+        out_img = self.aligner.warp_image(
+            in_img, trans, (dest_height, dest_width), rgb=rgb
+        )
+
+        if not rgb:
+            out_img = out_img[..., 0]
+
+        return numpy.rot90(out_img, k=2)
 
 
 class SleapTadpole(Tadpole):
