@@ -54,8 +54,12 @@ class TadpoleAligner:
         Cs, Rs, Ts = self.estimate_alignment(tadole)
         return self.do_alignment(tadole, Cs, Rs, Ts)
 
-    def estimate_alignment(self, tadole):
-        df = tadole.locations
+    def estimate_alignment(self, tadpole, frame=None):
+        if frame is None:
+            df = tadpole.locatons[frame:frame]
+
+        else:
+            df = tadpole.locations
         n = df.shape[0]
 
         Ps = (
@@ -111,7 +115,8 @@ class TadpoleAligner:
         trans = st.EuclideanTransform(matrix=hom)
         return trans
 
-    def _transform(self, image, trans, dbb_coords, dest_shape, rgb=False):
+    def warp_image(self, image, trans, dest_shape, rgb=False):
+        dbb_coords = self._destination_bb(dest_shape[0], dest_shape[1])
         sbb_coords = trans.inverse(dbb_coords).T.reshape(2, *dest_shape)
 
         # flip xy coords to ij, for image extraction
@@ -165,15 +170,13 @@ class TadpoleAligner:
         dest_shape = numpy.array([dest_height, dest_width])
         dest_offset = dest_shape // 2
 
-        dbb_coords = self._destination_bb(dest_height, dest_width)
-
         for i, (c, R, T, Ps, Plh) in tqdm(
             enumerate(zip(Cs, Rs, Ts, parts_to_trans, part_probs)), total=n
         ):
             image = clip.load_frame()
 
             trans = self._get_transformation(c, R, T)
-            image_trans = self._transform(image, trans, dbb_coords, dest_shape, rgb)
+            image_trans = self.warp_image(image, trans, dest_shape, rgb)
 
             if just_frames:
                 clip.save_frame(numpy.rot90(image_trans, k=2))
