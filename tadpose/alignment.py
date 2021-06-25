@@ -5,17 +5,11 @@ import numpy
 
 np = numpy
 
-
 from tqdm.auto import tqdm
-from skimage.draw import disk, line, line_aa
 from skimage import transform as st
-from skimage import io
-import matplotlib
-from matplotlib import pyplot as plt
-import seaborn as sns
-
-from scipy import stats
 from scipy.ndimage import map_coordinates
+from skimage.draw import disk, line, line_aa
+
 
 coords = ["x", "y"]
 
@@ -46,13 +40,35 @@ class TadpoleAligner:
 
         self.alignment_dict = alignment_dict
         self.scale = scale
-        self.fps = 24.0
+        self.fps = 60.0
 
         self.Q = numpy.stack(list(alignment_dict.values()), axis=0)
 
     def align(self, tadole):
         Cs, Rs, Ts = self.estimate_alignment(tadole)
         return self.do_alignment(tadole, Cs, Rs, Ts)
+
+    def compute_alignment_matrices(self, bodyparts, locations):
+        parts_of_align = list(self.alignment_dict.keys())
+
+        part_idx = [bodyparts.index(p) for p in parts_of_align]
+        Ps = locations[:, part_idx, ...]
+
+        # Ps = tadpole.locs(parts=parts_of_align, fill_missing=True)
+        n = len(Ps)
+
+        Cs = numpy.empty((n,))
+        Rs = numpy.empty_like(Ps)
+        Ts = numpy.empty((n, 2))
+        for i, P in enumerate(Ps):
+            Cs[i], Rs[i], Ts[i] = umeyama(P, self.Q)
+
+        return Cs, Rs, Ts
+
+    def new_align(self, bodyparts, locations):
+        Cs, Rs, Ts = self.compute_alignment_matrices(bodyparts, locations)
+
+        return ((locations @ Rs).T).T + (Ts[:, None, :].T / Cs).T
 
     def estimate_alignment(self, tadpole, frame=None):
         if frame is None:
@@ -67,6 +83,9 @@ class TadpoleAligner:
             .to_numpy()
             .reshape(-1, len(self.alignment_dict), 3)[:, :, :2]
         )
+
+        print(Ps)
+
         Cs = numpy.empty((n,))
         Rs = numpy.empty_like(Ps)
         Ts = numpy.empty((n, 2))

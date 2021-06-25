@@ -35,18 +35,24 @@ def fill_missing(Y, kind="linear"):
         y = Y[:, i]
 
         # Build interpolant.
-        x = numpy.flatnonzero(~numpy.isnan(y))
-        f = interp1d(x, y[x], kind=kind, fill_value=numpy.nan, bounds_error=False)
+        x = np.flatnonzero(~np.isnan(y))
+
+        if len(x) == 0:
+            print(
+                "WARNING: all locations of a bodypart are None. Cannot fill missing.... skipping"
+            )
+            Y[:, i] = y
+            continue
+
+        f = interp1d(x, y[x], kind=kind, fill_value=np.nan, bounds_error=False)
 
         # Fill missing
-        xq = numpy.flatnonzero(numpy.isnan(y))
+        xq = np.flatnonzero(np.isnan(y))
         y[xq] = f(xq)
 
         # Fill leading or trailing NaNs with the nearest non-NaN values
-        mask = numpy.isnan(y)
-        y[mask] = numpy.interp(
-            numpy.flatnonzero(mask), numpy.flatnonzero(~mask), y[~mask]
-        )
+        mask = np.isnan(y)
+        y[mask] = np.interp(np.flatnonzero(mask), np.flatnonzero(~mask), y[~mask])
 
         # Save slice
         Y[:, i] = y

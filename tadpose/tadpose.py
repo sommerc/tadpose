@@ -4,12 +4,13 @@ import h5py
 import numpy
 import pandas
 import matplotlib
-from functools import lru_cache
 
-from . import alignment
-from . import analysis
 from . import visu
 from . import utils
+from . import analysis
+from . import alignment
+
+from functools import lru_cache
 
 
 def file_select_dialog(ext=".yaml"):
@@ -206,9 +207,10 @@ class Tadpole:
             **kwargs,
         )
 
-    @lru_cache()
+    # @lru_cache()
     def aligned_image(self, frame, dest_height=100, dest_width=100, rgb=False):
         Cs, Rs, Ts = self.aligner.estimate_alignment(self, frame=frame)
+
         trans = self.aligner._get_transformation(Cs[0], Rs[0], Ts[0])
 
         if not self._vid_handle:
@@ -256,6 +258,58 @@ class SleapTadpole(Tadpole):
         df.columns = pandas.MultiIndex.from_product([self.bodyparts, coords])
 
         return df
+
+    @lru_cache()
+    def locs(self, track_idx=0, parts=None, fill_missing=True):
+        tracks = self.tracks
+
+        tracks = self.tracks[..., track_idx]
+
+        if parts is None:
+            parts = self.bodyparts
+
+        part_idx = [self.bodyparts.index(p) for p in parts]
+        tracks = tracks[:, part_idx, ...]
+
+        if fill_missing:
+            return utils.fill_missing(tracks)
+
+        return tracks
+
+    @lru_cache()
+    def ego_locs(self, track_idx=0, parts=None, fill_missing=True):
+        all_locations = self.locs(
+            track_idx=track_idx, parts=None, fill_missing=fill_missing
+        )  # get all parts
+
+        all_aligned_locations = self.aligner.new_align(self.bodyparts, all_locations)
+
+        if parts is None:
+            parts = self.bodyparts
+        part_idx = [self.bodyparts.index(p) for p in parts]
+        return all_aligned_locations[:, part_idx, ...]
+
+    @lru_cache()
+    def ego_image(self, frame, track_idx=0, dest_height=100, dest_width=100, rgb=False):
+        location = self.locs(track_idx)[frame : frame + 1, ...]
+        Cs, Rs, Ts = self.aligner.compute_alignment_matrices(self.bodyparts, location)
+
+        trans = self.aligner._get_transformation(Cs[0], Rs[0], Ts[0])
+
+        if not self._vid_handle:
+            self._vid_handle = cv2.VideoCapture(self.video_fn)
+
+        self._vid_handle.set(cv2.cv2.CAP_PROP_POS_FRAMES, frame)
+        res, in_img = self._vid_handle.read()
+
+        out_img = self.aligner.warp_image(
+            in_img, trans, (dest_height, dest_width), rgb=rgb
+        )
+
+        if not rgb:
+            out_img = out_img[..., 0]
+
+        return numpy.rot90(out_img, k=2)
 
     @property
     def locations(self):
