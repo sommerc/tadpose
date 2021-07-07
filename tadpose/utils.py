@@ -1,5 +1,31 @@
 import os
+import cv2
 import numpy
+import pandas as pd
+
+np = numpy
+
+from scipy.signal import savgol_filter
+from scipy.interpolate import interp1d
+
+
+def file_select_dialog(ext=".*"):
+    import tkinter as tk
+    from tkinter import filedialog
+
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes("-topmost", True)
+
+    file_name = filedialog.askopenfilename(
+        defaultextension=ext, filetypes=[(f"{ext} files", f"*{ext}")], parent=root,
+    )
+    root.destroy()
+
+    if len(file_name) == 0:
+        print("No file specified")
+
+    return file_name
 
 
 def outfile(main_path):
@@ -8,9 +34,6 @@ def outfile(main_path):
         return os.path.join(main_path, fn)
 
     return tmp
-
-
-from scipy.interpolate import interp1d
 
 
 def add_time_column(df, fps):
@@ -63,9 +86,6 @@ def fill_missing(Y, kind="linear"):
     return Y
 
 
-from scipy.signal import savgol_filter
-
-
 def smooth_diff(node_loc, win=25, poly=3):
     """
     node_loc is a [frames, 2] array
@@ -86,9 +106,6 @@ def smooth_diff(node_loc, win=25, poly=3):
     return node_vel
 
 
-import pandas as pd
-
-
 def corr_roll(datax, datay, win):
     """
     datax, datay are the two timeseries to find correlations between
@@ -101,21 +118,6 @@ def corr_roll(datax, datay, win):
     s2 = pd.Series(datay)
 
     return numpy.array(s2.rolling(win).corr(s1))
-
-
-"""
-Author: Hao Wu
-hwu01@g.harvard.edu
-You can find the directory for your ffmpeg bindings by: "find / | grep ffmpeg" and then setting it.
-This is the helper class for video reading and saving in DeepLabCut.
-Updated by AM
-You can set various codecs below,
-fourcc = cv2.VideoWriter_fourcc(*'MJPG')
-i.e. 'XVID'
-"""
-
-import cv2
-import numpy as np
 
 
 class VideoProcessor(object):
