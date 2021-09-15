@@ -60,8 +60,10 @@ def fill_missing(Y, kind="linear"):
         # Build interpolant.
         x = np.flatnonzero(~np.isnan(y))
 
-        if len(x) == 0:
-            print(
+        if len(x) < 2:
+            import warnings
+
+            warnings.warn(
                 "WARNING: all locations of a bodypart are None. Cannot fill missing.... skipping"
             )
             Y[:, i] = y
