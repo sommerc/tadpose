@@ -13,10 +13,6 @@ from . import alignment
 from functools import lru_cache
 
 
-
-
-
-
 class Tadpole:
     def __init__(self, video_fn, bodyparts_cmap):
         assert os.path.exists(video_fn), f"Movie file '{video_fn}' does not exist"
@@ -206,7 +202,7 @@ class SleapTadpole(Tadpole):
         if not rgb:
             out_img = out_img[..., 0]
 
-        return numpy.rot90(out_img, k=2)
+        return numpy.fliplr(numpy.rot90(out_img, k=2))
 
     @property
     def locations(self):

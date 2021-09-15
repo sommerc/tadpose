@@ -20,7 +20,6 @@ coords = ["x", "y"]
 
 
 def plot_parts(
-    df,
     tadpole,
     parts=None,
     alpha=0.02,
@@ -37,21 +36,21 @@ def plot_parts(
         parts = tadpole.bodyparts
 
     for p in parts:
-        x, y = df[p][coords].to_numpy().T
+        xy = tadpole.ego_locs(parts=(p,)).squeeze()
 
         if scatter:
-            ax.plot(x, y, ".", color=tadpole.bodypart_color[p], alpha=alpha)
+            ax.plot(*xy.T, ".", color=tadpole.bodypart_color[p], alpha=alpha)
 
         if lines:
-            ax.plot(x, y, "-", color=tadpole.bodypart_color[p], alpha=alpha)
+            ax.plot(*xy.T, "-", color=tadpole.bodypart_color[p], alpha=alpha)
 
         if contour:
-            sns.kdeplot(x=x, y=y, color=tadpole.bodypart_color[p], levels=5)
+            sns.kdeplot(*xy.T, color=tadpole.bodypart_color[p], levels=5)
 
         if True:
             ax.plot(
-                numpy.median(x),
-                numpy.median(y),
+                numpy.median(xy[:, 0]),
+                numpy.median(xy[:, 1]),
                 ".",
                 color=tadpole.bodypart_color[p],
                 markersize=8,
