@@ -20,6 +20,8 @@ from functools import reduce
 
 coords = ["x", "y"]
 
+from .utils import smooth_diff
+
 
 def get_displacements(df, part, coords=("x", "y")):
     return (df[part][list(coords)].diff(1) ** 2).sum(1, skipna=False).apply(numpy.sqrt)
@@ -35,6 +37,32 @@ def get_speed(df, part, coords=("x", "y"), per="frame"):
     res = displ / dt
     res.iloc[0] = res.iloc[1]
     return res
+
+
+def ego_speeds(tadpole, parts=None):
+    if parts is None:
+        parts = tadpole.bodyparts
+
+    locs = tadpole.ego_locs(parts=tuple(parts))
+
+    speeds = {}
+    for pi, p in enumerate(parts):
+        speeds[p] = smooth_diff(locs[:, pi, :])
+
+    return pandas.DataFrame(speeds)
+
+
+def speeds(tadpole, parts=None):
+    if parts is None:
+        parts = tadpole.bodyparts
+
+    locs = tadpole.locs(parts=tuple(parts))
+
+    speeds = {}
+    for pi, p in enumerate(parts):
+        speeds[p] = smooth_diff(locs[:, pi, :])
+
+    return pandas.DataFrame(speeds)
 
 
 def get_angle(df_flt_tail, part1="TailTip", part2="TailCenter"):
