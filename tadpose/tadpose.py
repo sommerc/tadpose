@@ -204,6 +204,19 @@ class SleapTadpole(Tadpole):
 
         return numpy.fliplr(numpy.rot90(out_img, k=2))
 
+    @lru_cache()
+    def image(self, frame, track_idx=0, rgb=False):
+        if not self._vid_handle:
+            self._vid_handle = cv2.VideoCapture(self.video_fn)
+
+        self._vid_handle.set(cv2.cv2.CAP_PROP_POS_FRAMES, frame)
+        res, out_img = self._vid_handle.read()
+
+        if not rgb:
+            out_img = out_img[..., 0]
+
+        return out_img
+
     @property
     def locations(self):
         tracks = self.tracks
