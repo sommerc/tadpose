@@ -82,13 +82,25 @@ def fill_missing(Y, kind="linear"):
         # Save slice
         Y[:, i] = y
 
-    # Restore to initial shape.
+    # Restore  to initial shape.
     Y = Y.reshape(initial_shape)
 
     return Y
 
 
-def smooth_diff(node_loc, win=25, poly=3):
+def cart2pol(xy):
+    rho = np.linalg.norm(xy, axis=-1)
+    phi = np.arctan2(xy[..., 1], xy[..., 0])
+    return rho, phi
+
+
+def pol2cart(rho, phi):
+    x = rho * np.cos(phi)
+    y = rho * np.sin(phi)
+    return (x, y)
+
+
+def smooth_diff(node_loc, win=25, poly=3, deriv=1):
     """
     node_loc is a [frames, 2] array
 
@@ -101,11 +113,29 @@ def smooth_diff(node_loc, win=25, poly=3):
     node_loc_vel = numpy.zeros_like(node_loc)
 
     for c in range(node_loc.shape[-1]):
-        node_loc_vel[:, c] = savgol_filter(node_loc[:, c], win, poly, deriv=1)
+        node_loc_vel[:, c] = savgol_filter(node_loc[:, c], win, poly, deriv=deriv)
 
     node_vel = numpy.linalg.norm(node_loc_vel, axis=1)
 
     return node_vel
+
+
+def smooth(node_loc, win=25, poly=3, deriv=0):
+    """
+    node_loc is a [frames, 2] array
+
+    win defines the window to smooth over
+
+    poly defines the order of the polynomial
+    to fit with
+
+    """
+    node_loc_vel = numpy.zeros_like(node_loc)
+
+    for c in range(node_loc.shape[-1]):
+        node_loc_vel[:, c] = savgol_filter(node_loc[:, c], win, poly, deriv=deriv)
+
+    return node_loc_vel
 
 
 def corr_roll(datax, datay, win):
@@ -119,7 +149,7 @@ def corr_roll(datax, datay, win):
     s1 = pd.Series(datax)
     s2 = pd.Series(datay)
 
-    return numpy.array(s2.rolling(win).corr(s1))
+    return numpy.array(s2.rolling(win, center=True).corr(s1))
 
 
 class VideoProcessor(object):
