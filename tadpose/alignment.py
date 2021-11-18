@@ -197,6 +197,9 @@ class TadpoleAligner:
             trans = self._get_transformation(c, R, T)
             image_trans = self.warp_image(image, trans, dest_shape, rgb)
 
+            # if i > 500:
+            #     break
+
             if just_frames:
                 clip.save_frame(numpy.rot90(image_trans, k=2))
                 continue
@@ -278,9 +281,6 @@ class TadpoleAligner:
                     image_trans[rr, cc, :] = tadpole.bodypart_colors[ip]
 
             clip.save_frame(numpy.rot90(image_trans, k=2))
-
-            # if i > 200:
-            #     break
 
         clip.close()
 
