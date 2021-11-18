@@ -84,7 +84,7 @@ class TadpoleAligner:
             .reshape(-1, len(self.alignment_dict), 3)[:, :, :2]
         )
 
-        print(Ps)
+        # print(Ps)
 
         Cs = numpy.empty((n,))
         Rs = numpy.empty_like(Ps)
