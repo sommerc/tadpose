@@ -246,7 +246,7 @@ class VideoProcessor(object):
         """
         implement your own
         """
-        pass
+        self.mywriter.close()
 
 
 class VideoProcessorCV(VideoProcessor):
@@ -283,4 +283,57 @@ class VideoProcessorCV(VideoProcessor):
 
     def close(self):
         self.svid.release()
+        self.vid.release()
+
+
+class VideoProcessorFFMPEG(VideoProcessor):
+    """
+    OpenCV implementation of VideoProcessor
+    requires opencv-python==3.4.0.12
+    """
+
+    def __init__(self, *args, **kwargs):
+        super(VideoProcessorFFMPEG, self).__init__(*args, **kwargs)
+
+    def get_video(self):
+        return cv2.VideoCapture(self.fname)
+
+    def get_info(self):
+        self.w = int(self.vid.get(cv2.CAP_PROP_FRAME_WIDTH))
+        self.h = int(self.vid.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        all_frames = int(self.vid.get(cv2.CAP_PROP_FRAME_COUNT))
+        self.FPS = self.vid.get(cv2.CAP_PROP_FPS)
+        self.nc = 3
+        if self.nframes == -1 or self.nframes > all_frames:
+            self.nframes = all_frames
+
+        print("FPS", self.FPS)
+
+    def create_video(self):
+        import skvideo.io
+
+        print("using ffmpeg writer")
+
+        self.mywriter = skvideo.io.FFmpegWriter(
+            self.sname,
+            outputdict={
+                "-vcodec": "libx264",  # use the h.264 codec
+                "-crf": "18",  # set the constant rate factor to 0, which is lossless
+                "-preset": "fast",  # the slower the better compression, in princple, try,
+                "-framerate": str(self.FPS)
+                # other options see https://trac.ffmpeg.org/wiki/Encode/H.264
+            },
+        )
+
+        return self.mywriter
+
+    def _read_frame(self):  # return RGB (rather than BGR)!
+        # return cv2.cvtColor(np.flip(self.vid.read()[1],2), cv2.COLOR_BGR2RGB)
+        return np.flip(self.vid.read()[1], 2)
+
+    def save_frame(self, frame):
+        self.mywriter.writeFrame(frame)
+
+    def close(self):
+        self.mywriter.close()
         self.vid.release()
