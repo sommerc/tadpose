@@ -9,6 +9,7 @@ from . import visu
 from . import utils
 from . import analysis
 from . import alignment
+from . import plot
 
 from functools import lru_cache
 

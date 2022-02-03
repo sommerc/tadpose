@@ -14,27 +14,6 @@ from skimage.draw import disk, line, line_aa
 coords = ["x", "y"]
 
 
-def mirror_df(in_df):
-    df = in_df.copy()
-
-    cols_to_mirror = [
-        bp[:-1]
-        for bp in list(in_df.columns.get_level_values(0).unique())
-        if bp.endswith("R")
-    ]
-
-    for bp in cols_to_mirror:
-        tmp = df[f"{bp}L"].copy()
-        df[f"{bp}L"] = df[f"{bp}R"]
-        df[f"{bp}R"] = tmp
-
-    for c in df.columns:
-        if c[1] == "x":
-            df[c] = -df[c]
-
-    return df
-
-
 class TadpoleAligner:
     def __init__(self, alignment_dict, scale=False):
 

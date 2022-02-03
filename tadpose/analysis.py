@@ -62,7 +62,7 @@ def speeds(tadpole, parts=None):
     for pi, p in enumerate(parts):
         speeds[p] = smooth_diff(locs[:, pi, :])
 
-    return pandas.DataFrame(speeds)
+    return pandas.DataFrame(speeds, columns=parts)
 
 
 def get_angle(df_flt_tail, part1="TailTip", part2="TailCenter"):
