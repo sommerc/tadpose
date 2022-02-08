@@ -5,8 +5,10 @@ import pandas as pd
 
 np = numpy
 
+
 from scipy.signal import savgol_filter
 from scipy.interpolate import interp1d
+from scipy.ndimage import gaussian_filter1d
 
 
 def file_select_dialog(ext=".*"):
@@ -118,6 +120,21 @@ def smooth_diff(node_loc, win=25, poly=3, deriv=1):
     node_vel = numpy.linalg.norm(node_loc_vel, axis=1)
 
     return node_vel
+
+
+def smooth_gaussian(node_loc, sigma, deriv=0):
+    """
+    node_loc is a [frames, 2] array
+
+    """
+    node_loc_vel = numpy.zeros_like(node_loc)
+
+    for c in range(node_loc.shape[-1]):
+        node_loc_vel[:, c] = gaussian_filter1d(
+            node_loc[:, c].T, sigma=sigma, order=deriv
+        )
+
+    return node_loc_vel
 
 
 def smooth(node_loc, win=25, poly=3, deriv=0):
