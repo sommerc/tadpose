@@ -1,9 +1,5 @@
-import os
-import glob
-import pandas
-import numpy
-
-np = numpy
+import numpy as np
+import pandas as pd
 
 from tqdm.auto import tqdm
 from skimage import transform as st
@@ -21,7 +17,7 @@ class TadpoleAligner:
         self.scale = scale
         self.fps = 60.0
 
-        self.Q = numpy.stack(list(alignment_dict.values()), axis=0)
+        self.Q = np.stack(list(alignment_dict.values()), axis=0)
 
     def align(self, tadole):
         Cs, Rs, Ts = self.estimate_alignment(tadole)
@@ -36,9 +32,9 @@ class TadpoleAligner:
         # Ps = tadpole.locs(parts=parts_of_align, fill_missing=True)
         n = len(Ps)
 
-        Cs = numpy.empty((n,))
-        Rs = numpy.empty_like(Ps)
-        Ts = numpy.empty((n, 2))
+        Cs = np.empty((n,))
+        Rs = np.empty_like(Ps)
+        Ts = np.empty((n, 2))
         for i, P in enumerate(Ps):
             Cs[i], Rs[i], Ts[i] = umeyama(P, self.Q)
 
@@ -65,9 +61,9 @@ class TadpoleAligner:
 
         # print(Ps)
 
-        Cs = numpy.empty((n,))
-        Rs = numpy.empty_like(Ps)
-        Ts = numpy.empty((n, 2))
+        Cs = np.empty((n,))
+        Rs = np.empty_like(Ps)
+        Ts = np.empty((n, 2))
         for i, P in enumerate(Ps):
             Cs[i], Rs[i], Ts[i] = umeyama(P, self.Q)
 
@@ -80,8 +76,8 @@ class TadpoleAligner:
 
         parts_aligned = ((parts @ Rs).T).T + (Ts[:, None, :].T / Cs).T
 
-        df_aligned = pandas.DataFrame(
-            numpy.concatenate([parts_aligned, part_probs[..., None]], axis=-1).reshape(
+        df_aligned = pd.DataFrame(
+            np.concatenate([parts_aligned, part_probs[..., None]], axis=-1).reshape(
                 parts.shape[0], -1
             )
         )
@@ -90,7 +86,7 @@ class TadpoleAligner:
         return df_aligned
 
     def _destination_bb(self, dest_height, dest_width):
-        dest_shape = numpy.array([dest_height, dest_width])
+        dest_shape = np.array([dest_height, dest_width])
 
         dest_offset = dest_shape // 2
 
@@ -100,11 +96,11 @@ class TadpoleAligner:
             np.linspace(-dest_offset[0], dest_offset[0], dest_height),
         )
 
-        dbb_coords = numpy.stack([dbb_coords[0].ravel(), dbb_coords[1].ravel()], axis=1)
+        dbb_coords = np.stack([dbb_coords[0].ravel(), dbb_coords[1].ravel()], axis=1)
         return dbb_coords
 
     def _get_transformation(self, c, R, T):
-        hom = numpy.zeros((3, 3))
+        hom = np.zeros((3, 3))
         hom[2, 2] = 1
 
         hom[:2, :2] = R.T
@@ -125,7 +121,7 @@ class TadpoleAligner:
                 image_trans_gray[:, :, np.newaxis], 3, axis=2
             ).astype("uint8")
         else:
-            image_trans = numpy.stack(
+            image_trans = np.stack(
                 [
                     map_coordinates(image[:, :, c], sbb_coords[::-1, ...])
                     for c in range(3)
@@ -165,7 +161,7 @@ class TadpoleAligner:
 
         clip = vp(movie_in, movie_out, codec="mp4v", sw=dest_width, sh=dest_height)
 
-        dest_shape = numpy.array([dest_height, dest_width])
+        dest_shape = np.array([dest_height, dest_width])
         dest_offset = dest_shape // 2
 
         for i, (c, R, T, Ps, Plh) in tqdm(
@@ -180,7 +176,7 @@ class TadpoleAligner:
             #     break
 
             if just_frames:
-                clip.save_frame(numpy.rot90(image_trans, k=2))
+                clip.save_frame(np.rot90(image_trans, k=2))
                 continue
 
             # paint axis
@@ -259,7 +255,7 @@ class TadpoleAligner:
                     rr, cc = disk((nP[1], nP[0]), dot_radius, shape=dest_shape)
                     image_trans[rr, cc, :] = tadpole.bodypart_colors[ip]
 
-            clip.save_frame(numpy.rot90(image_trans, k=2))
+            clip.save_frame(np.rot90(image_trans, k=2))
 
         clip.close()
 
@@ -273,7 +269,7 @@ class TadpoleAligner:
 
     #     clip = vp(movie_in, "", codec="mp4v", sw=dest_width, sh=dest_height)
 
-    #     dest_shape = numpy.array([dest_height, dest_width])
+    #     dest_shape = np.array([dest_height, dest_width])
     #     dest_offset = dest_shape // 2
 
     #     dbb_coords = self._destination_bb(dest_height, dest_width)
@@ -292,7 +288,7 @@ class TadpoleAligner:
     #         image_trans = self._transform(image, trans, dbb_coords, dest_shape)
     #         image_trans2 = image_trans.copy()
 
-    #         # io.imsave(file_out + f"image_frame_{i:04d}.png", numpy.rot90(image_trans, k=2))
+    #         # io.imsave(file_out + f"image_frame_{i:04d}.png", np.rot90(image_trans, k=2))
 
     #         # paint current detection
     #         for ip, nP in enumerate(trans(Ps)):
@@ -302,8 +298,8 @@ class TadpoleAligner:
     #             rr, cc = disk((nP[1], nP[0]), 8, shape=dest_shape)
     #             image_trans[rr, cc, :] = tadpole.bodypart_colors[ip]
 
-    #         image_trans = numpy.rot90(image_trans, k=2)
-    #         image_trans2 = numpy.rot90(image_trans2, k=2)
+    #         image_trans = np.rot90(image_trans, k=2)
+    #         image_trans2 = np.rot90(image_trans2, k=2)
 
     #         # io.imsave(file_out + f"alligned_image_frame_{i:04d}_pred.png", image_trans)
 
@@ -373,10 +369,10 @@ class TadpoleAligner:
 #             print("already there... skipping (use overwrite=True) to overwrite")
 #             continue
 
-#         df = pandas.read_hdf(f"{mov_base_fn}{scorer}.h5")
+#         df = pd.read_hdf(f"{mov_base_fn}{scorer}.h5")
 #         df = df[scorer]
 #         ta = TadpoleAligner(
-#             cfg, {"TailStem": numpy.array([0, 0.0]), "Center": numpy.array([0, 1.0])}
+#             cfg, {"TailStem": np.array([0, 0.0]), "Center": np.array([0, 1.0])}
 #         )
 
 #         ta.export_movie(df, mov_fn, out_fn, **kwargs)

@@ -1,25 +1,68 @@
 import os
+import traceback
+from itertools import count
+from datetime import datetime
+from typing import Union, Tuple, List
+from dataclasses import dataclass, field
+
+
 import numpy as np
 import pandas as pd
+from . import analysis
+
 import seaborn as sns
-from tadpose import utils, analysis
+from matplotlib import cm
 from matplotlib import pyplot as plt
 from matplotlib.colors import is_color_like, Normalize
-from matplotlib import cm
-import os
-import re
-import glob
-import pandas
-import traceback
-import tkinter as tk
-from datetime import datetime
-from functools import partial
-from tkinter import filedialog
-from dataclasses import dataclass, field
-from typing import Union, Tuple, List
-from itertools import count
+
 
 coords = ["x", "y"]
+
+
+class BatchPlotter:
+    def __init__(self, exp_table, aligner, output_grouped_by="Stage", output_path=None):
+        if isinstance(exp_table, str):
+            self.exp_table = pd.read_csv(exp_table, sep="\t")
+            if output_path is None:
+                output_path = os.path.splitext(exp_table)[0]
+        else:
+            self.exp_table = exp_table
+            if output_path is None:
+                output_path = "."
+
+        self.aligner = aligner
+        self.output_grouped_by = output_grouped_by
+        self.output_path = output_path
+        # other params
+        self.bodyparts_cmap = None
+
+        self.compute_list = []
+
+    def run(self):
+        for grp, df_grp in self.exp_table.groupby(self.output_grouped_by):
+            # TODO create grp dir
+            now = datetime.now().strftime("%d-%b-%Y_%H%M")
+            outdir = f"{self.output_path}/{grp}"  # _{now}" TODO:
+            os.makedirs(outdir, exist_ok=True)
+
+            print(f"{self.output_grouped_by}: {grp} -> {outdir}")
+            print("---")
+            for ind, row in df_grp.iterrows():
+
+                tadpole = tadpose.Tadpole.from_sleap(
+                    row["FullPath"], bodyparts_cmap=self.bodyparts_cmap
+                )
+
+                tadpole.aligner = self.aligner
+                print(f"  |-- {row['File']}")
+                for func in self.compute_list:
+                    try:
+                        print(f"  |  |-- {type(func).__name__} ({func.id})")
+                        output_df = func(tad=tadpole, row_info=row, outdir=outdir)
+                    except Exception as e:
+                        print(f"ERROR with '{func}' on '{row['File']}'")
+                        traceback.print_exc()
+                        continue
 
 
 def dish(

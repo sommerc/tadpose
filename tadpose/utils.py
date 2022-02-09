@@ -5,45 +5,93 @@ import pandas as pd
 
 np = numpy
 
-
 from scipy.signal import savgol_filter
 from scipy.interpolate import interp1d
 from scipy.ndimage import gaussian_filter1d
 
+import re
+import glob
+import pandas
+import traceback
+import tkinter as tk
+from datetime import datetime
+from tkinter import filedialog
+from collections import defaultdict
 
-def file_select_dialog(ext=".*"):
-    import tkinter as tk
-    from tkinter import filedialog
 
+def dir_select_dialog():
     root = tk.Tk()
     root.withdraw()
     root.attributes("-topmost", True)
 
-    file_name = filedialog.askopenfilename(
-        defaultextension=ext, filetypes=[(f"{ext} files", f"*{ext}")], parent=root,
+    file_name = filedialog.askdirectory(
+        title="Choose folder with .mp4 frog movies", parent=root,
     )
     root.destroy()
 
     if len(file_name) == 0:
-        print("No file specified")
+        print("Error: no input folder selected... abort")
+        raise RuntimeError()
 
     return file_name
 
 
-def outfile(main_path):
-    def tmp(fn):
-        os.makedirs(os.path.join(main_path, os.path.dirname(fn)), exist_ok=True)
-        return os.path.join(main_path, fn)
+def file_select_dialog():
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes("-topmost", True)
 
-    return tmp
+    file_name = filedialog.asksaveasfilename(
+        title="Create table file (.tab)",
+        defaultextension=[("tab", "*.tab")],
+        initialfile="frogs.tab",
+        parent=root,
+    )
+    root.destroy()
+
+    if len(file_name) == 0:
+        print("Error: no output filename selected... abort")
+        raise RuntimeError()
+
+    return file_name
 
 
-def add_time_column(df, fps):
-    df = df.copy()
-    df["Time", "frame"] = list(df.index)
-    df["Time", "sec"] = df["Time", "frame"] / fps
+def create_experiment_table(save_to_file=True):
+    try:
+        directroy = dir_select_dialog()
+    except RuntimeError as e:
+        return None, None
 
-    return df
+    mp4_files = glob.glob(f"{directroy}/*.mp4")
+
+    res = defaultdict(list)
+    for fn in mp4_files:
+        base_fn = os.path.splitext(os.path.basename(fn))[0]
+        parts = base_fn.split("_")
+
+        if len(parts) == 6:
+            parts.insert(5, "wet")
+
+        res["Id"].append(parts[0])
+        res["Take"].append(parts[6])
+        res["Genotype"].append(parts[3])
+        res["Stage"].append(parts[4][3:])
+        res["Date"].append(parts[1])
+        res["Time"].append(parts[2])
+        res["Environment"].append(re.match(r"[a-zA-Z]*", parts[5]).group())
+        res["File"].append(base_fn)
+        res["FullPath"].append(fn)
+
+    df = pandas.DataFrame(res)
+
+    if save_to_file:
+        try:
+            out_file = file_select_dialog()
+        except RuntimeError as e:
+            return None, None
+        df.to_csv(out_file, sep="\t", index=False)
+    print(f"Found {len(mp4_files)} movies. Output table saved to '{out_file}'")
+    return df, out_file
 
 
 def fill_missing(Y, kind="linear"):
