@@ -8,7 +8,7 @@ coords = ["x", "y"]
 
 
 class BatchGrouper:
-    def __init__(self, exp_table, aligner, output_grouped_by="Stage", output_path=None):
+    def __init__(self, exp_table, aligner, output_grouped_by="Stage"):
         if isinstance(exp_table, str):
             self.exp_table = pd.read_csv(exp_table, sep="\t")
         else:

@@ -243,9 +243,9 @@ class SkeletonMap:
 
         if self.color == "speed":
             if self.ego:
-                node_velocities = analysis.ego_speeds(tad, parts=tuple(self.parts))
+                node_velocities = analysis.ego_speeds(tad, parts=self.parts)
             else:
-                node_velocities = analysis.speeds(tad, parts=tuple(self.parts))
+                node_velocities = analysis.speeds(tad, parts=self.parts)
 
             node_velocities = node_velocities.iloc[perm].iloc[: self.N_max].to_numpy()
 
@@ -331,9 +331,9 @@ class SpeedBox:
             self.parts = tuple(self.parts)
 
         if self.ego:
-            node_velocities = analysis.ego_speeds(tad, parts=tuple(self.parts))
+            node_velocities = analysis.ego_speeds(tad, parts=self.parts)
         else:
-            node_velocities = analysis.speeds(tad, parts=tuple(self.parts))
+            node_velocities = analysis.speeds(tad, parts=self.parts)
 
         node_velocities = node_velocities[self.xlim[0] : self.xlim[1]]
 
