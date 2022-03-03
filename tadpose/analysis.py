@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 
 from .tadpose import Tadpole
-from .utils import smooth_diff
+from .utils import smooth_diff, smooth
 
 coords = ["x", "y"]
 
@@ -71,22 +71,33 @@ def speeds(tadpole, parts=None):
     return pd.DataFrame(speeds, columns=parts)
 
 
-# def get_angle(df_flt_tail, part1="TailTip", part2="TailCenter"):
-#     v0 = df_flt_tail[part1][coords].to_numpy() - df_flt_tail[part2][coords].to_numpy()
-#     v1 = df_flt_tail[part2][coords].to_numpy()
+def angles(tad, part_tuple1, part_tuple2, win=5):
+    elocs = tad.ego_locs().copy()
 
-#     v0 = v0 / np.linalg.norm(v0, axis=1)[:, None]
-#     v1 = v1 / np.linalg.norm(v1, axis=1)[:, None]
+    elocs[..., 0] *= -1
 
-#     c = (v0 * v1).sum(1)
-#     angles = np.arccos(np.clip(c, -1, 1))
-#     return np.rad2deg(angles)
+    parts1_idx = [tad.bodyparts.index(p) for p in part_tuple1]
+    parts2_idx = [tad.bodyparts.index(p) for p in part_tuple2]
 
+    parts1 = elocs[:, parts1_idx, :]
+    parts2 = elocs[:, parts2_idx, :]
 
-# def filter_likelihood(df, parts, min_likelihood):
-#     sel = reduce(np.logical_and, [df[p].likelihood > min_likelihood for p in parts])
+    for p in range(parts1.shape[1]):
+        parts1[:, p, :] = smooth(parts1[:, p, :], win=win)
+        parts2[:, p, :] = smooth(parts2[:, p, :], win=win)
 
-#     return df[sel]
+    vec1 = np.diff(parts1, axis=1).squeeze()
+    vec2 = np.diff(parts2, axis=1).squeeze()
+
+    vec1 = (vec1.T / np.linalg.norm(vec1, axis=1)).T
+    vec2 = (vec2.T / np.linalg.norm(vec2, axis=1)).T
+
+    ortho_vec1 = np.c_[-vec1[:, 1], vec1[:, 0]]
+    sign = np.sign(np.sum(ortho_vec1 * vec2, axis=1))
+
+    c = np.sum(vec1 * vec2, axis=1)
+    angles = sign * np.rad2deg(np.arccos(np.clip(c, -1, 1)))
+    return angles
 
 
 def get_rotation_angle(Rs):
