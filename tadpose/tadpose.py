@@ -3,6 +3,7 @@ import cv2
 import h5py
 import numpy
 import pandas
+import warnings
 import matplotlib
 
 
@@ -49,14 +50,6 @@ class Tadpole:
 
     @property
     def bodyparts(self):
-        pass
-
-    @bodyparts.setter
-    def bodyparts(self, bodyparts):
-        self._bodyparts = bodyparts
-
-    @bodyparts.getter
-    def bodyparts(self):
         return self._bodyparts
 
     @property
@@ -82,6 +75,9 @@ class Tadpole:
     @property
     @lru_cache()  ### TOTO proper cache for multi-animal
     def aligned_locations(self):
+        warnings.warn(
+            "\n\nPlease DO NOT use 'aligned_locations' and 'locations' anymore.\nWill be removed soon.\n Use 'tad.ego_locs() to get numpy array of aligned locations\n\n'"
+        )
         return self._aligner.align(self)
 
     def export_aligned_movie(
@@ -127,7 +123,7 @@ class SleapTadpole(Tadpole):
 
         with h5py.File(self.analysis_file, "r") as hf:
             self.tracks = hf["tracks"][:].T
-            self.bodyparts = list(map(lambda x: x.decode(), hf["node_names"]))
+            self._bodyparts = list(map(lambda x: x.decode(), hf["node_names"]))
 
         self.current_track = 0
 
@@ -180,7 +176,7 @@ class SleapTadpole(Tadpole):
         part_idx = [self.bodyparts.index(p) for p in parts]
         return all_aligned_locations[:, part_idx, ...]
 
-    @lru_cache()
+    # @lru_cache()
     def ego_image(self, frame, track_idx=0, dest_height=100, dest_width=100, rgb=False):
         location = self.locs(track_idx)[frame : frame + 1, ...]
         Cs, Rs, Ts = self.aligner.compute_alignment_matrices(self.bodyparts, location)
@@ -200,9 +196,9 @@ class SleapTadpole(Tadpole):
         if not rgb:
             out_img = out_img[..., 0]
 
-        return numpy.fliplr(numpy.rot90(out_img, k=2))
+        return numpy.rot90(out_img, k=2)
 
-    @lru_cache()
+    # @lru_cache()
     def image(self, frame, track_idx=0, rgb=False):
         if not self._vid_handle:
             self._vid_handle = cv2.VideoCapture(self.video_fn)
@@ -217,6 +213,9 @@ class SleapTadpole(Tadpole):
 
     @property
     def locations(self):
+        warnings.warn(
+            "\n\nPlease DO NOT use 'aligned_locations' and 'locations' anymore.\nWill be removed soon.\n Use 'tad.ego_locs() to get numpy array of aligned locations\n\n'"
+        )
         tracks = self.tracks
         liklihoods = 1.0 - numpy.isnan(tracks[:, :, 0, self.current_track])
 

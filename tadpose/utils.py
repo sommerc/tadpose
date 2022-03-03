@@ -198,7 +198,7 @@ def smooth(node_loc, win=25, poly=3, deriv=0):
     node_loc_vel = numpy.zeros_like(node_loc)
 
     for c in range(node_loc.shape[-1]):
-        node_loc_vel[:, c] = savgol_filter(node_loc[:, c], win, poly, deriv=deriv)
+        node_loc_vel[..., c] = savgol_filter(node_loc[:, c], win, poly, deriv=deriv)
 
     return node_loc_vel
 
