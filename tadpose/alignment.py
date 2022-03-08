@@ -6,18 +6,21 @@ from skimage import transform as st
 from scipy.ndimage import map_coordinates
 from skimage.draw import disk, line, line_aa
 
+from tadpose import utils
+
 
 coords = ["x", "y"]
 
 
 class TadpoleAligner:
-    def __init__(self, alignment_dict, scale=False):
+    def __init__(self, alignment_dict, scale=False, smooth_sigma=None):
 
         self.alignment_dict = alignment_dict
         self.scale = scale
         self.fps = 60.0
 
         self.Q = np.stack(list(alignment_dict.values()), axis=0)
+        self.smooth_sigma = smooth_sigma
 
     def align(self, tadole):
         Cs, Rs, Ts = self.estimate_alignment(tadole)

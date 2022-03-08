@@ -152,6 +152,16 @@ class SleapTadpole(Tadpole):
 
         tracks = self.tracks[..., track_idx]
 
+        if self.aligner.smooth_sigma is not None:
+            parts_of_align = list(self.aligner.alignment_dict.keys())
+
+            part_idx = [self.bodyparts.index(p) for p in parts_of_align]
+
+            for p in part_idx:
+                tracks[:, p] = utils.smooth_gaussian(
+                    tracks[:, p], sigma=self.aligner.smooth_sigma
+                )
+
         if parts is None:
             parts = self.bodyparts
 
@@ -175,6 +185,22 @@ class SleapTadpole(Tadpole):
             parts = self.bodyparts
         part_idx = [self.bodyparts.index(p) for p in parts]
         return all_aligned_locations[:, part_idx, ...]
+
+    def ego_bbox(self, frame, track_idx=0, dest_height=100, dest_width=100):
+        location = self.locs(track_idx)[frame : frame + 1, ...]
+        Cs, Rs, Ts = self.aligner.compute_alignment_matrices(self.bodyparts, location)
+
+        trans = self.aligner._get_transformation(Cs[0], Rs[0], Ts[0])
+
+        dest_shape = [
+            [-dest_width // 2, -dest_height // 2],
+            [-dest_width // 2, dest_height // 2],
+            [dest_width // 2, dest_height // 2],
+            [dest_width // 2, -dest_height // 2],
+        ]
+        sbb_coords = trans.inverse(dest_shape)
+
+        return sbb_coords
 
     # @lru_cache()
     def ego_image(self, frame, track_idx=0, dest_height=100, dest_width=100, rgb=False):
