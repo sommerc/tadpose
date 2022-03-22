@@ -347,8 +347,14 @@ class VideoProcessorCV(VideoProcessor):
         self.svid.write(np.flip(frame, 2))
 
     def close(self):
-        self.svid.release()
-        self.vid.release()
+        try:
+            self.svid.release()
+        except:
+            pass
+        try:
+            self.vid.release()
+        except:
+            pass
 
 
 class VideoProcessorFFMPEG(VideoProcessor):

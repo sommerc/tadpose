@@ -1,7 +1,7 @@
 import os
 import cv2
 import h5py
-import numpy
+import numpy as np
 import pandas
 import warnings
 import matplotlib
@@ -43,11 +43,7 @@ class Tadpole:
         pass
 
     def split_detection_and_likelihood(self):
-        tmp = (
-            self.locations[self.bodyparts]
-            .to_numpy()
-            .reshape(-1, len(self.bodyparts), 3)
-        )
+        tmp = self.locations[self.bodyparts].to_np().reshape(-1, len(self.bodyparts), 3)
         return tmp[..., :2], tmp[..., 2]
 
     @property
@@ -57,8 +53,8 @@ class Tadpole:
     @property
     def bodypart_colors(self):
         colorclass = matplotlib.cm.ScalarMappable(cmap=self.bodyparts_cmap)
-        C = colorclass.to_rgba(numpy.linspace(0, 1, len(self.bodyparts)))
-        return (C[:, :3] * 255).astype(numpy.uint8)
+        C = colorclass.to_rgba(np.linspace(0, 1, len(self.bodyparts)))
+        return (C[:, :3] * 255).astype(np.uint8)
 
     @property
     def bodypart_color(self):
@@ -81,7 +77,7 @@ class Tadpole:
     @lru_cache()  ### TOTO proper cache for multi-animal
     def aligned_locations(self):
         warnings.warn(
-            "\n\nPlease DO NOT use 'aligned_locations' and 'locations' anymore.\nWill be removed soon.\n Use 'tad.ego_locs() to get numpy array of aligned locations\n\n'"
+            "\n\nPlease DO NOT use 'aligned_locations' and 'locations' anymore.\nWill be removed soon.\n Use 'tad.ego_locs() to get np array of aligned locations\n\n'"
         )
         return self._aligner.align(self)
 
@@ -89,7 +85,7 @@ class Tadpole:
         self, dest_height, dest_width, aligned_suffix="aligned", **kwargs
     ):
         out_mov = f"{self.vid_path}/{self.vid_fn}{self.scorer}_{aligned_suffix}.mp4"
-        print(f"Export to: {out_mov}")
+
         self.aligner.export_movie(
             self,
             self.video_fn,
@@ -98,6 +94,7 @@ class Tadpole:
             dest_width=dest_width,
             **kwargs,
         )
+        print(f"Export to: {out_mov}")
 
     # # @lru_cache()
     # def aligned_image(self, frame, dest_height=100, dest_width=100, rgb=False):
@@ -118,7 +115,7 @@ class Tadpole:
     #     if not rgb:
     #         out_img = out_img[..., 0]
 
-    #     return numpy.rot90(out_img, k=2)
+    #     return np.rot90(out_img, k=2)
 
 
 class SleapTadpole(Tadpole):
@@ -139,13 +136,13 @@ class SleapTadpole(Tadpole):
     def __getitem__(self, track_idx):
         assert track_idx < len(self), "track does not exist, go away"
         tracks = self.tracks[..., track_idx]
-        liklihoods = 1.0 - numpy.isnan(self.tracks[:, :, 0, track_idx])
+        liklihoods = 1.0 - np.isnan(self.tracks[:, :, 0, track_idx])
 
         coords = ["x", "y", "likelihood"]
 
         liklihoods = liklihoods[..., None]
 
-        tracks = numpy.concatenate([tracks, liklihoods], axis=2)
+        tracks = np.concatenate([tracks, liklihoods], axis=2)
         df = pandas.DataFrame(tracks.reshape(len(tracks), -1))
         df.columns = pandas.MultiIndex.from_product([self.bodyparts, coords])
 
@@ -201,7 +198,7 @@ class SleapTadpole(Tadpole):
 
         self._vid_handle.set(cv2.cv2.CAP_PROP_POS_FRAMES, frames[0])
 
-        out_img = numpy.zeros((len(frames), dest_height, dest_width, 3), dtype="uint8")
+        out_img = np.zeros((len(frames), dest_height, dest_width, 3), dtype="uint8")
 
         for k, frame in enumerate(tqdm(frames)):
             trans = self.aligner.transformations[track_idx][frame]
@@ -212,7 +209,7 @@ class SleapTadpole(Tadpole):
             )
 
         return out_img.squeeze()
-        return numpy.rot90(out_img.squeeze(), k=2)
+        return np.rot90(out_img.squeeze(), k=2)
 
     def ego_image_gen(self, frames, track_idx=0, dest_height=100, dest_width=100):
         if isinstance(frames, (list, tuple)) and len(frames) == 2:
@@ -233,7 +230,6 @@ class SleapTadpole(Tadpole):
                 in_img, trans, dest_height, dest_width,
             )
 
-    # @lru_cache()
     def image(self, frame, rgb=False):
         if not self._vid_handle:
             self._vid_handle = cv2.VideoCapture(self.video_fn)
@@ -249,10 +245,10 @@ class SleapTadpole(Tadpole):
     @property
     def locations(self):
         warnings.warn(
-            "\n\nPlease DO NOT use 'aligned_locations' and 'locations' anymore.\nWill be removed soon.\n Use 'tad.ego_locs() to get numpy array of aligned locations\n\n'"
+            "\n\nPlease DO NOT use 'aligned_locations' and 'locations' anymore.\nWill be removed soon.\n Use 'tad.ego_locs() to get np array of aligned locations\n\n'"
         )
         tracks = self.tracks
-        liklihoods = 1.0 - numpy.isnan(tracks[:, :, 0, self.current_track])
+        liklihoods = 1.0 - np.isnan(tracks[:, :, 0, self.current_track])
 
         tracks = tracks[..., self.current_track]
 
@@ -261,7 +257,7 @@ class SleapTadpole(Tadpole):
 
         liklihoods = liklihoods[..., None]
 
-        tracks = numpy.concatenate([tracks, liklihoods], axis=2)
+        tracks = np.concatenate([tracks, liklihoods], axis=2)
         df = pandas.DataFrame(tracks.reshape(len(tracks), -1))
         df.columns = pandas.MultiIndex.from_product([parts, coords])
 
@@ -271,19 +267,26 @@ class SleapTadpole(Tadpole):
     def analysis_file(self):
         return f"{self.video_fn}.predictions.analysis.h5"
 
-    def export_aligned_movie(
-        self, dest_height, dest_width, aligned_suffix="aligned", **kwargs
+    def export_ego_movie(
+        self, frames=None, shape=(224, 244), track_idx=0, suffix="aligned",
     ):
-        out_mov = f"{self.vid_path}/{self.vid_fn}_{self.current_track:02}_{aligned_suffix}.mp4"
+        from .utils import VideoProcessorCV as vp
+
+        out_mov = f"{self.vid_path}/{self.vid_fn}_{track_idx:02}_{suffix}.mp4"
         print(f"Export to: {out_mov}")
-        self.aligner.export_movie(
-            self,
-            self.video_fn,
-            out_mov,
-            dest_height=dest_height,
-            dest_width=dest_width,
-            **kwargs,
-        )
+
+        dest_height, dest_width = shape
+        clip = vp(sname=out_mov, codec="mp4v", sw=dest_width, sh=dest_height)
+
+        if frames is None:
+            frames = [0, len(self.tracks)]
+
+        for img in tqdm(
+            self.ego_image_gen(frames, track_idx, dest_height, dest_width),
+            total=frames[1] - frames[0],
+        ):
+            clip.save_frame(np.rot90(img, k=2))
+        clip.close()
 
 
 class DeeplabcutTadpole(Tadpole):
