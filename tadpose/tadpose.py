@@ -6,6 +6,8 @@ import pandas
 import warnings
 import matplotlib
 
+from tqdm.auto import tqdm
+
 
 from functools import lru_cache
 
@@ -70,6 +72,9 @@ class Tadpole:
 
     @aligner.setter
     def aligner(self, ta):
+        for track_idx in range(len(self)):
+            all_locations = self.locs(track_idx=track_idx)
+            ta.fit(track_idx, self.bodyparts, all_locations)
         self._aligner = ta
 
     @property
@@ -94,26 +99,26 @@ class Tadpole:
             **kwargs,
         )
 
-    # @lru_cache()
-    def aligned_image(self, frame, dest_height=100, dest_width=100, rgb=False):
-        Cs, Rs, Ts = self.aligner.estimate_alignment(self, frame=frame)
+    # # @lru_cache()
+    # def aligned_image(self, frame, dest_height=100, dest_width=100, rgb=False):
+    #     Cs, Rs, Ts = self.aligner.estimate_alignment(self, frame=frame)
 
-        trans = self.aligner._get_transformation(Cs[0], Rs[0], Ts[0])
+    #     trans = self.aligner._get_transformation(Cs[0], Rs[0], Ts[0])
 
-        if not self._vid_handle:
-            self._vid_handle = cv2.VideoCapture(self.video_fn)
+    #     if not self._vid_handle:
+    #         self._vid_handle = cv2.VideoCapture(self.video_fn)
 
-        self._vid_handle.set(cv2.cv2.CAP_PROP_POS_FRAMES, frame)
-        res, in_img = self._vid_handle.read()
+    #     self._vid_handle.set(cv2.cv2.CAP_PROP_POS_FRAMES, frame)
+    #     res, in_img = self._vid_handle.read()
 
-        out_img = self.aligner.warp_image(
-            in_img, trans, (dest_height, dest_width), rgb=rgb
-        )
+    #     out_img = self.aligner.warp_image(
+    #         in_img, trans, (dest_height, dest_width), rgb=rgb
+    #     )
 
-        if not rgb:
-            out_img = out_img[..., 0]
+    #     if not rgb:
+    #         out_img = out_img[..., 0]
 
-        return numpy.rot90(out_img, k=2)
+    #     return numpy.rot90(out_img, k=2)
 
 
 class SleapTadpole(Tadpole):
@@ -148,19 +153,7 @@ class SleapTadpole(Tadpole):
 
     @lru_cache()
     def locs(self, track_idx=0, parts=None, fill_missing=True):
-        tracks = self.tracks
-
         tracks = self.tracks[..., track_idx]
-
-        if self.aligner.smooth_sigma is not None:
-            parts_of_align = list(self.aligner.alignment_dict.keys())
-
-            part_idx = [self.bodyparts.index(p) for p in parts_of_align]
-
-            for p in part_idx:
-                tracks[:, p] = utils.smooth_gaussian(
-                    tracks[:, p], sigma=self.aligner.smooth_sigma
-                )
 
         if parts is None:
             parts = self.bodyparts
@@ -175,22 +168,15 @@ class SleapTadpole(Tadpole):
 
     @lru_cache()
     def ego_locs(self, track_idx=0, parts=None, fill_missing=True):
-        all_locations = self.locs(
-            track_idx=track_idx, parts=None, fill_missing=fill_missing
-        )  # get all parts
+        locations = self.locs(
+            track_idx=track_idx, parts=parts, fill_missing=fill_missing
+        )
 
-        all_aligned_locations = self.aligner.new_align(self.bodyparts, all_locations)
-
-        if parts is None:
-            parts = self.bodyparts
-        part_idx = [self.bodyparts.index(p) for p in parts]
-        return all_aligned_locations[:, part_idx, ...]
+        return self.aligner.transform(track_idx, locations)
 
     def ego_bbox(self, frame, track_idx=0, dest_height=100, dest_width=100):
-        location = self.locs(track_idx)[frame : frame + 1, ...]
-        Cs, Rs, Ts = self.aligner.compute_alignment_matrices(self.bodyparts, location)
 
-        trans = self.aligner._get_transformation(Cs[0], Rs[0], Ts[0])
+        trans = self.aligner.transformations[track_idx][frame]
 
         dest_shape = [
             [-dest_width // 2, -dest_height // 2],
@@ -202,30 +188,34 @@ class SleapTadpole(Tadpole):
 
         return sbb_coords
 
-    # @lru_cache()
-    def ego_image(self, frame, track_idx=0, dest_height=100, dest_width=100, rgb=False):
-        location = self.locs(track_idx)[frame : frame + 1, ...]
-        Cs, Rs, Ts = self.aligner.compute_alignment_matrices(self.bodyparts, location)
-
-        trans = self.aligner._get_transformation(Cs[0], Rs[0], Ts[0])
+    def ego_image(self, frame, track_idx=0, dest_height=100, dest_width=100, **kwargs):
+        if isinstance(frame, int):
+            frames = range(frame, frame + 1)
+        elif isinstance(frame, (list, tuple)) and len(frame) == 2:
+            frames = range(frame[0], frame[1])
+        else:
+            raise RuntimeError("frame must be integer or list of [start, end]")
 
         if not self._vid_handle:
             self._vid_handle = cv2.VideoCapture(self.video_fn)
 
-        self._vid_handle.set(cv2.cv2.CAP_PROP_POS_FRAMES, frame)
-        res, in_img = self._vid_handle.read()
+        self._vid_handle.set(cv2.cv2.CAP_PROP_POS_FRAMES, frames[0])
 
-        out_img = self.aligner.warp_image(
-            in_img, trans, (dest_height, dest_width), rgb=rgb
-        )
+        out_img = numpy.zeros((len(frames), dest_height, dest_width, 3), dtype="uint8")
 
-        if not rgb:
-            out_img = out_img[..., 0]
+        for k, frame in enumerate(tqdm(frames)):
+            trans = self.aligner.transformations[track_idx][frame]
+            _, in_img = self._vid_handle.read()
 
-        return numpy.rot90(out_img, k=2)
+            out_img[k] = self.aligner.warp_image(
+                in_img, trans, dest_height, dest_width,
+            )
+
+        return out_img.squeeze()
+        return numpy.rot90(out_img.squeeze(), k=2)
 
     # @lru_cache()
-    def image(self, frame, track_idx=0, rgb=False):
+    def image(self, frame, rgb=False):
         if not self._vid_handle:
             self._vid_handle = cv2.VideoCapture(self.video_fn)
 
