@@ -1,13 +1,11 @@
 import numpy as np
-import pandas as pd
-from scipy.ndimage import map_coordinates
-from skimage import transform as st
-from skimage.draw import disk, line, line_aa
 from tqdm.auto import tqdm
+from skimage import transform as st
+from scipy.ndimage import map_coordinates
+
+# from skimage.draw import disk, line, line_aa
 
 from tadpose import utils
-
-coords = ["x", "y"]
 
 
 class TadpoleAligner:
