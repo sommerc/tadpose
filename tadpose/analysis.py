@@ -4,8 +4,6 @@ import pandas as pd
 from .tadpose import Tadpole
 from .utils import smooth_diff, smooth
 
-coords = ["x", "y"]
-
 
 class BatchGrouper:
     def __init__(self, exp_table, aligner, output_grouped_by="Stage"):
@@ -27,22 +25,6 @@ class BatchGrouper:
                 tadpole.aligner = self.aligner
 
                 yield tadpole, grp, ind, row
-
-
-# def get_displacements(df, part, coords=("x", "y")):
-#     return (df[part][list(coords)].diff(1) ** 2).sum(1, skipna=False).apply(np.sqrt)
-
-
-# def get_displacements(df, part, coords=("x", "y")):
-#     return (df[part][list(coords)].diff(1) ** 2).sum(1, skipna=False).apply(np.sqrt)
-
-
-# def get_speed(df, part, coords=("x", "y"), per="frame"):
-#     displ = get_displacements(df, part, coords)
-#     dt = df["Time"][per].diff(1)
-#     res = displ / dt
-#     res.iloc[0] = res.iloc[1]
-#     return res
 
 
 def ego_speeds(tadpole, parts=None):
@@ -100,17 +82,17 @@ def angles(tad, part_tuple1, part_tuple2, win=5):
     return angles
 
 
-def get_rotation_angle(Rs):
-    return np.rad2deg(np.arctan2(Rs[:, 1, 0], -Rs[:, 0, 0],))
+# def get_rotation_angle(Rs):
+#     return np.rad2deg(np.arctan2(Rs[:, 1, 0], -Rs[:, 0, 0],))
 
 
-def get_singed_angular_speed(Rs):
-    return np.array(
-        list(
-            map(
-                lambda a: a if abs(a) < 180 else 360 - abs(a),
-                np.diff(get_rotation_angle(Rs)),
-            )
-        )
-    )
+# def get_singed_angular_speed(Rs):
+#     return np.array(
+#         list(
+#             map(
+#                 lambda a: a if abs(a) < 180 else 360 - abs(a),
+#                 np.diff(get_rotation_angle(Rs)),
+#             )
+#         )
+#     )
 

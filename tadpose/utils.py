@@ -1,9 +1,7 @@
 import os
 import cv2
-import numpy
+import numpy as np
 import pandas as pd
-
-np = numpy
 
 from scipy.signal import savgol_filter
 from scipy.interpolate import interp1d
@@ -11,10 +9,7 @@ from scipy.ndimage import gaussian_filter1d
 
 import re
 import glob
-import pandas
-import traceback
 import tkinter as tk
-from datetime import datetime
 from tkinter import filedialog
 from collections import defaultdict
 
@@ -82,7 +77,7 @@ def create_experiment_table(save_to_file=True):
         res["File"].append(base_fn)
         res["FullPath"].append(fn)
 
-    df = pandas.DataFrame(res)
+    df = pd.DataFrame(res)
 
     if save_to_file:
         try:
@@ -160,12 +155,12 @@ def smooth_diff(node_loc, win=25, poly=3, deriv=1):
     to fit with
 
     """
-    node_loc_vel = numpy.zeros_like(node_loc)
+    node_loc_vel = np.zeros_like(node_loc)
 
     for c in range(node_loc.shape[-1]):
         node_loc_vel[:, c] = savgol_filter(node_loc[:, c], win, poly, deriv=deriv)
 
-    node_vel = numpy.linalg.norm(node_loc_vel, axis=1)
+    node_vel = np.linalg.norm(node_loc_vel, axis=1)
 
     return node_vel
 
@@ -175,7 +170,7 @@ def smooth_gaussian(node_loc, sigma, deriv=0):
     node_loc is a [frames, 2] array
 
     """
-    node_loc_vel = numpy.zeros_like(node_loc)
+    node_loc_vel = np.zeros_like(node_loc)
 
     for c in range(node_loc.shape[-1]):
         node_loc_vel[:, c] = gaussian_filter1d(
@@ -195,7 +190,7 @@ def smooth(node_loc, win=25, poly=3, deriv=0):
     to fit with
 
     """
-    node_loc_vel = numpy.zeros_like(node_loc)
+    node_loc_vel = np.zeros_like(node_loc)
 
     for c in range(node_loc.shape[-1]):
         node_loc_vel[..., c] = savgol_filter(node_loc[:, c], win, poly, deriv=deriv)
@@ -214,7 +209,7 @@ def corr_roll(datax, datay, win):
     s1 = pd.Series(datax)
     s2 = pd.Series(datay)
 
-    return numpy.array(s2.rolling(win, center=True).corr(s1))
+    return np.array(s2.rolling(win, center=True).corr(s1))
 
 
 class VideoProcessor(object):

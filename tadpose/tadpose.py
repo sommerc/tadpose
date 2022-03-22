@@ -1,14 +1,12 @@
 import os
 import cv2
 import h5py
-import numpy as np
-import pandas
 import warnings
 import matplotlib
+import numpy as np
+import pandas as pd
 
 from tqdm.auto import tqdm
-
-
 from functools import lru_cache
 
 from . import utils
@@ -94,28 +92,7 @@ class Tadpole:
             dest_width=dest_width,
             **kwargs,
         )
-        print(f"Export to: {out_mov}")
-
-    # # @lru_cache()
-    # def aligned_image(self, frame, dest_height=100, dest_width=100, rgb=False):
-    #     Cs, Rs, Ts = self.aligner.estimate_alignment(self, frame=frame)
-
-    #     trans = self.aligner._get_transformation(Cs[0], Rs[0], Ts[0])
-
-    #     if not self._vid_handle:
-    #         self._vid_handle = cv2.VideoCapture(self.video_fn)
-
-    #     self._vid_handle.set(cv2.cv2.CAP_PROP_POS_FRAMES, frame)
-    #     res, in_img = self._vid_handle.read()
-
-    #     out_img = self.aligner.warp_image(
-    #         in_img, trans, (dest_height, dest_width), rgb=rgb
-    #     )
-
-    #     if not rgb:
-    #         out_img = out_img[..., 0]
-
-    #     return np.rot90(out_img, k=2)
+        print(f"Movie exported to: {out_mov}")
 
 
 class SleapTadpole(Tadpole):
@@ -143,8 +120,8 @@ class SleapTadpole(Tadpole):
         liklihoods = liklihoods[..., None]
 
         tracks = np.concatenate([tracks, liklihoods], axis=2)
-        df = pandas.DataFrame(tracks.reshape(len(tracks), -1))
-        df.columns = pandas.MultiIndex.from_product([self.bodyparts, coords])
+        df = pd.DataFrame(tracks.reshape(len(tracks), -1))
+        df.columns = pd.MultiIndex.from_product([self.bodyparts, coords])
 
         return df
 
@@ -258,8 +235,8 @@ class SleapTadpole(Tadpole):
         liklihoods = liklihoods[..., None]
 
         tracks = np.concatenate([tracks, liklihoods], axis=2)
-        df = pandas.DataFrame(tracks.reshape(len(tracks), -1))
-        df.columns = pandas.MultiIndex.from_product([parts, coords])
+        df = pd.DataFrame(tracks.reshape(len(tracks), -1))
+        df.columns = pd.MultiIndex.from_product([parts, coords])
 
         return df
 
@@ -297,7 +274,7 @@ class DeeplabcutTadpole(Tadpole):
     @property
     @lru_cache()
     def locations(self):
-        return pandas.read_hdf(self.analysis_file)[self.scorer]
+        return pd.read_hdf(self.analysis_file)[self.scorer]
 
     @property
     @lru_cache()
