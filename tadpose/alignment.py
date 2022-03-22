@@ -29,9 +29,7 @@ class TadpoleAligner:
 
         if self.smooth_sigma is not None:
             for p in range(Ps.shape[1]):
-                Ps[:, p] = utils.smooth_gaussian(
-                    Ps[:, p], sigma=self.aligner.smooth_sigma
-                )
+                Ps[:, p] = utils.smooth_gaussian(Ps[:, p], sigma=self.smooth_sigma)
 
         n = len(Ps)
 
@@ -60,70 +58,6 @@ class TadpoleAligner:
 
         return ((locations @ Rs).T).T + (Ts[:, None, :].T / Cs).T
 
-    # def estimate_alignment(self, tadpole, frame=None):
-    #     if frame is None:
-    #         df = tadpole.locations
-
-    #     else:
-    #         df = tadpole.locations.loc[frame:frame]
-    #     n = df.shape[0]
-
-    #     Ps = (
-    #         df[list(self.alignment_dict.keys())]
-    #         .to_numpy()
-    #         .reshape(-1, len(self.alignment_dict), 3)[:, :, :2]
-    #     )
-
-    #     # print(Ps)
-
-    #     Cs = np.empty((n,))
-    #     Rs = np.empty_like(Ps)
-    #     Ts = np.empty((n, 2))
-    #     for i, P in enumerate(Ps):
-    #         Cs[i], Rs[i], Ts[i] = umeyama(P, self.Q)
-
-    #     return Cs, Rs, Ts
-
-    # def do_alignment(self, tadpole, Cs, Rs, Ts):
-    #     df = tadpole.locations
-
-    #     parts, part_probs = tadpole.split_detection_and_likelihood()
-
-    #     parts_aligned = ((parts @ Rs).T).T + (Ts[:, None, :].T / Cs).T
-
-    #     df_aligned = pd.DataFrame(
-    #         np.concatenate([parts_aligned, part_probs[..., None]], axis=-1).reshape(
-    #             parts.shape[0], -1
-    #         )
-    #     )
-    #     df_aligned.columns = df.columns
-
-    #     return df_aligned
-
-    def _destination_bb(self, dest_height, dest_width):
-        dest_shape = np.array([dest_height, dest_width])
-
-        dest_offset = dest_shape // 2
-
-        # xy coords (needed for LA)
-        dbb_coords = np.meshgrid(
-            np.linspace(-dest_offset[1], dest_offset[1], dest_width),
-            np.linspace(-dest_offset[0], dest_offset[0], dest_height),
-        )
-
-        dbb_coords = np.stack([dbb_coords[0].ravel(), dbb_coords[1].ravel()], axis=1)
-        return dbb_coords
-
-    # def _get_transformation(self, c, R, T):
-    #     hom = np.zeros((3, 3))
-    #     hom[2, 2] = 1
-
-    #     hom[:2, :2] = R.T
-    #     hom[:2, 2] = T / c
-
-    #     trans = st.EuclideanTransform(matrix=hom)
-    #     return trans
-
     def warp_image(
         self, image, trans, dest_height, dest_width,
     ):
@@ -134,8 +68,6 @@ class TadpoleAligner:
         )
 
         dbb_coords = np.stack([dbb_coords[0].ravel(), dbb_coords[1].ravel()], axis=1)
-
-        print(dbb_coords.shape)
 
         sbb_coords = trans.inverse(dbb_coords).T.reshape(2, dest_height, dest_width)
 
@@ -282,124 +214,6 @@ class TadpoleAligner:
     #         clip.save_frame(np.rot90(image_trans, k=2))
 
     #     clip.close()
-
-    # def export_screenshots(
-    #     self, tadpole, movie_in, file_out, frames, dest_height=740, dest_width=280,
-    # ):
-    #     df = tadpole.locations
-    #     n = len(df)
-
-    #     Cs, Rs, Ts = self.estimate_alignment(df)
-
-    #     clip = vp(movie_in, "", codec="mp4v", sw=dest_width, sh=dest_height)
-
-    #     dest_shape = np.array([dest_height, dest_width])
-    #     dest_offset = dest_shape // 2
-
-    #     dbb_coords = self._destination_bb(dest_height, dest_width)
-
-    #     parts_to_trans, _ = tadpole.split_detection_and_likelihood()
-
-    #     plt.ioff()
-
-    #     for i, (c, R, T, Ps) in enumerate(zip(Cs, Rs, Ts, parts_to_trans)):
-    #         image = clip.load_frame()
-    #         if i not in frames:
-    #             continue
-
-    #         trans = self._get_transformation(c, R, T)
-
-    #         image_trans = self._transform(image, trans, dbb_coords, dest_shape)
-    #         image_trans2 = image_trans.copy()
-
-    #         # io.imsave(file_out + f"image_frame_{i:04d}.png", np.rot90(image_trans, k=2))
-
-    #         # paint current detection
-    #         for ip, nP in enumerate(trans(Ps)):
-
-    #             # flip dest_offset into xy
-    #             nP = (nP + dest_offset[::-1] + 0.5).astype("int32")
-    #             rr, cc = disk((nP[1], nP[0]), 8, shape=dest_shape)
-    #             image_trans[rr, cc, :] = tadpole.bodypart_colors[ip]
-
-    #         image_trans = np.rot90(image_trans, k=2)
-    #         image_trans2 = np.rot90(image_trans2, k=2)
-
-    #         # io.imsave(file_out + f"alligned_image_frame_{i:04d}_pred.png", image_trans)
-
-    #         f, ax = plt.subplots()
-    #         ax.imshow(
-    #             image_trans2,
-    #             extent=[
-    #                 dest_width // 2,
-    #                 -dest_width // 2,
-    #                 -dest_height // 2,
-    #                 dest_height // 2,
-    #             ],
-    #         )
-    #         ax.axhline(
-    #             0,
-    #             xmin=-dest_width // 2,
-    #             xmax=dest_width // 2,
-    #             color="white",
-    #             linestyle=":",
-    #             linewidth=0.5,
-    #         )
-    #         ax.axvline(
-    #             0,
-    #             ymin=-dest_height // 2,
-    #             ymax=dest_height // 2,
-    #             color="white",
-    #             linestyle=":",
-    #             linewidth=0.5,
-    #         )
-
-    #         aligned_locs = trans(Ps)
-    #         for ip, nP in enumerate(aligned_locs):
-    #             ax.plot(nP[0], nP[1], ".", color=tadpole.bodypart_colors[ip] / 255.0)
-
-    #         # ax.set_xticklabels([str(-int(xxx.get_text())) for xxx in ax.get_xticklabels()])
-
-    #         sns.despine(ax=ax)
-
-    #         plt.savefig(
-    #             file_out + f"alligned_image_frame_{i:04d}_with_axes.pdf", dpi=120
-    #         )
-    #         plt.close(f)
-
-    #     clip.vid.release()
-
-
-# def explort_aligned_movies(
-#     path_config_file,
-#     orig_movies,
-#     scorer,
-#     out_suffix="aligned",
-#     overwrite=False,
-#     **kwargs,
-# ):
-#     from deeplabcut.utils import read_config
-#     from deeplabcut.utils.video_processor import VideoProcessorCV as vp
-#     cfg = read_config(path_config_file)
-#     bodyparts = cfg["bodyparts"]
-
-#     for mov_fn in tqdm(orig_movies):
-#         print(mov_fn)
-#         mov_base_fn = os.path.splitext(mov_fn)[0]
-
-#         out_fn = f"{mov_base_fn}{scorer}_{out_suffix}.mp4"
-
-#         if os.path.exists(out_fn) and not overwrite:
-#             print("already there... skipping (use overwrite=True) to overwrite")
-#             continue
-
-#         df = pd.read_hdf(f"{mov_base_fn}{scorer}.h5")
-#         df = df[scorer]
-#         ta = TadpoleAligner(
-#             cfg, {"TailStem": np.array([0, 0.0]), "Center": np.array([0, 1.0])}
-#         )
-
-#         ta.export_movie(df, mov_fn, out_fn, **kwargs)
 
 
 def umeyama(P, Q):
