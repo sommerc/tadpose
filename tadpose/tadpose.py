@@ -214,6 +214,25 @@ class SleapTadpole(Tadpole):
         return out_img.squeeze()
         return numpy.rot90(out_img.squeeze(), k=2)
 
+    def ego_image_gen(self, frames, track_idx=0, dest_height=100, dest_width=100):
+        if isinstance(frames, (list, tuple)) and len(frames) == 2:
+            frames = range(frames[0], frames[1])
+        else:
+            raise RuntimeError("Frames must be integer or list of [start, end]")
+
+        if not self._vid_handle:
+            self._vid_handle = cv2.VideoCapture(self.video_fn)
+
+        self._vid_handle.set(cv2.cv2.CAP_PROP_POS_FRAMES, frames[0])
+
+        for frame in frames:
+            trans = self.aligner.transformations[track_idx][frame]
+            _, in_img = self._vid_handle.read()
+
+            yield self.aligner.warp_image(
+                in_img, trans, dest_height, dest_width,
+            )
+
     # @lru_cache()
     def image(self, frame, rgb=False):
         if not self._vid_handle:
