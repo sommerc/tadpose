@@ -37,7 +37,7 @@ class TadpoleAligner:
 
         transformations = [None] * n
 
-        for i, P in enumerate(tqdm(Ps, desc=f"Aligning animal: {track_idx}")):
+        for i, P in enumerate(Ps):
             Cs[i], Rs[i], Ts[i] = umeyama(P, self.Q)
 
             hom = np.zeros((3, 3))
