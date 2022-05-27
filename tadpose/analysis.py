@@ -53,8 +53,8 @@ def speeds(tadpole, parts=None):
     return pd.DataFrame(speeds, columns=parts)
 
 
-def angles(tad, part_tuple1, part_tuple2, win=5):
-    elocs = tad.ego_locs().copy()
+def angles(tad, part_tuple1, part_tuple2, win=5, track_idx=0):
+    elocs = tad.ego_locs(track_idx=track_idx).copy()
 
     elocs[..., 0] *= -1
 
