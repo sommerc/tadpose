@@ -6,7 +6,7 @@ import matplotlib
 import numpy as np
 import pandas as pd
 
-from tqdm.auto import tqdm
+from tqdm.auto import tqdm, trange
 from functools import lru_cache
 
 from . import utils
@@ -66,7 +66,7 @@ class Tadpole:
 
     @aligner.setter
     def aligner(self, ta):
-        for track_idx in range(len(self)):
+        for track_idx in trange(len(self), desc="Aligning animals"):
             all_locations = self.locs(track_idx=track_idx)
             ta.fit(track_idx, self.bodyparts, all_locations)
         self._aligner = ta
@@ -78,21 +78,6 @@ class Tadpole:
             "\n\nPlease DO NOT use 'aligned_locations' and 'locations' anymore.\nWill be removed soon.\n Use 'tad.ego_locs() to get np array of aligned locations\n\n'"
         )
         return self._aligner.align(self)
-
-    def export_aligned_movie(
-        self, dest_height, dest_width, aligned_suffix="aligned", **kwargs
-    ):
-        out_mov = f"{self.vid_path}/{self.vid_fn}{self.scorer}_{aligned_suffix}.mp4"
-
-        self.aligner.export_movie(
-            self,
-            self.video_fn,
-            out_mov,
-            dest_height=dest_height,
-            dest_width=dest_width,
-            **kwargs,
-        )
-        print(f"Movie exported to: {out_mov}")
 
 
 class SleapTadpole(Tadpole):
@@ -108,6 +93,10 @@ class SleapTadpole(Tadpole):
 
     def __len__(self):
         return self.tracks.shape[-1]
+
+    @property
+    def nframes(self):
+        return len(self.tracks)
 
     @lru_cache()
     def __getitem__(self, track_idx):
@@ -177,7 +166,7 @@ class SleapTadpole(Tadpole):
 
         out_img = np.zeros((len(frames), dest_height, dest_width, 3), dtype="uint8")
 
-        for k, frame in enumerate(tqdm(frames)):
+        for k, frame in enumerate(frames):
             trans = self.aligner.transformations[track_idx][frame]
             _, in_img = self._vid_handle.read()
 
@@ -188,8 +177,10 @@ class SleapTadpole(Tadpole):
         return out_img.squeeze()
         return np.rot90(out_img.squeeze(), k=2)
 
-    def ego_image_gen(self, frames, track_idx=0, dest_height=100, dest_width=100):
-        if isinstance(frames, (list, tuple)) and len(frames) == 2:
+    def ego_image_gen(self, frames=None, track_idx=0, dest_height=100, dest_width=100):
+        if frames is None:
+            frames = range(self.nframes)
+        elif isinstance(frames, (list, tuple)) and len(frames) == 2:
             frames = range(frames[0], frames[1])
         else:
             raise RuntimeError("Frames must be integer or list of [start, end]")
