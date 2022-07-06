@@ -9,7 +9,7 @@ import pandas as pd
 from tqdm.auto import tqdm, trange
 from functools import lru_cache
 
-from . import utils
+from . import utils, analysis
 
 
 class Tadpole:
@@ -223,6 +223,51 @@ class SleapTadpole(Tadpole):
         with open(".temp.gif", "rb") as file:
             display(Image(file.read(), format="png"))
 
+    def speed(self, frames=None, track_idx=0):
+        pass  #
+
+    def acceleration(self, frames=None, track_idx=0):
+        pass
+
+    def spline_curvature(
+        self, parts, frames=None, track_idx=0, n_interpolants=64, sigma=0
+    ):
+        if frames is None:
+            frames = range(self.nframes)
+        elif isinstance(frames, (list, tuple)) and len(frames) == 2:
+            frames = range(frames[0], frames[1])
+        elif isinstance(frames, (int,)):
+            frames = range(frames, frames + 1)
+        else:
+            raise RuntimeError("Frames must be integer or list of [start, end]")
+
+        parts_positions = self.ego_locs(parts=tuple(parts), track_idx=track_idx)[frames]
+
+        get_curvature = lambda points: analysis.ReparametrizedSplineFit(
+            points, n_interpolants
+        ).singed_curvature(sigma)
+
+        return np.stack(list(map(get_curvature, parts_positions)))
+
+    def parts_detected(self, parts, frames=None, track_idx=0):
+        if frames is None:
+            frames = range(self.nframes)
+        elif isinstance(frames, (list, tuple)) and len(frames) == 2:
+            frames = range(frames[0], frames[1])
+        elif isinstance(frames, (int,)):
+            frames = range(frames, frames + 1)
+        else:
+            raise RuntimeError("Frames must be integer or list of [start, end]")
+
+        parts_idx = [self.bodyparts.index(p) for p in parts]
+
+        print(parts_idx)
+        print(frames)
+
+        return np.logical_not(
+            np.isnan(self.tracks[frames][:, parts_idx, 0, track_idx])
+        ).T
+
     @property
     def locations(self):
         warnings.warn(
@@ -289,3 +334,24 @@ class DeeplabcutTadpole(Tadpole):
     def analysis_file(self):
         return f"{self.vid_path}/{self.vid_fn}{self.scorer}.h5"
 
+
+class BatchGrouper:
+    def __init__(self, exp_table, aligner, output_grouped_by="Stage"):
+        if isinstance(exp_table, str):
+            self.exp_table = pd.read_csv(exp_table, sep="\t")
+        else:
+            self.exp_table = exp_table
+
+        self.aligner = aligner
+        self.output_grouped_by = output_grouped_by
+
+    def __len__(self):
+        return len(self.exp_table)
+
+    def __iter__(self):
+        for grp, df_grp in self.exp_table.groupby(self.output_grouped_by):
+            for ind, row in df_grp.iterrows():
+                tadpole = Tadpole.from_sleap(row["FullPath"],)
+                tadpole.aligner = self.aligner
+
+                yield tadpole, grp, ind, row

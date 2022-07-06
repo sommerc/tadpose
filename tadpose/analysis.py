@@ -1,30 +1,10 @@
 import numpy as np
 import pandas as pd
 
-from .tadpose import Tadpole
+from scipy import interpolate
+from scipy.ndimage import gaussian_filter1d
+
 from .utils import smooth_diff, smooth
-
-
-class BatchGrouper:
-    def __init__(self, exp_table, aligner, output_grouped_by="Stage"):
-        if isinstance(exp_table, str):
-            self.exp_table = pd.read_csv(exp_table, sep="\t")
-        else:
-            self.exp_table = exp_table
-
-        self.aligner = aligner
-        self.output_grouped_by = output_grouped_by
-
-    def __len__(self):
-        return len(self.exp_table)
-
-    def __iter__(self):
-        for grp, df_grp in self.exp_table.groupby(self.output_grouped_by):
-            for ind, row in df_grp.iterrows():
-                tadpole = Tadpole.from_sleap(row["FullPath"],)
-                tadpole.aligner = self.aligner
-
-                yield tadpole, grp, ind, row
 
 
 def ego_speeds(tadpole, parts=None):
@@ -80,6 +60,42 @@ def angles(tad, part_tuple1, part_tuple2, win=5, track_idx=0):
     c = np.sum(vec1 * vec2, axis=1)
     angles = sign * np.rad2deg(np.arccos(np.clip(c, -1, 1)))
     return angles
+
+
+class ReparametrizedSplineFit:  #
+    def __init__(self, points, n_interpolants=64):
+        self.points = points
+        self.n_interpolants = n_interpolants
+
+        s_inter = np.linspace(0, len(points), n_interpolants)
+
+        s_init = np.linspace(0, len(points), len(points))
+        spl_points = interpolate.CubicSpline(s_init, points, bc_type="natural")
+
+        points_inter = spl_points(s_inter)
+
+        points_tangents = spl_points.derivative(1)(s_inter)
+
+        arc_len = np.cumsum(np.linalg.norm(points_tangents, axis=1))
+        self.points_arc_length = arc_len
+
+        arc_len = arc_len / arc_len.max() * n_interpolants
+        arc_len = np.r_[[0], arc_len[:-1]]
+
+        self.s = np.linspace(0, n_interpolants, n_interpolants)
+        self.spline = interpolate.CubicSpline(arc_len, points_inter, bc_type="natural")
+
+    def singed_curvature(self, sigma=0):
+        xp, yp = self.spline.derivative(1)(self.s).T
+        xpp, ypp = self.spline.derivative(2)(self.s).T
+
+        mixed_term = xp * ypp - yp * xpp
+        norm_term = (xp ** 2 + yp ** 2) ** (3 / 2)
+        K = mixed_term / norm_term
+        if sigma > 0:
+            K = gaussian_filter1d(K, sigma)
+
+        return K
 
 
 # def get_rotation_angle(Rs):
