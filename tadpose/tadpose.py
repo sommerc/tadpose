@@ -222,7 +222,6 @@ class SleapTadpole(Tadpole):
         return out_img
 
     def video_gif(self, frames=None, dest_width=150, dest_height=300):
-        frames = self._check_frames(frames)
         import imageio
         from IPython.display import Image, display
 
