@@ -44,9 +44,10 @@ def angles(tad, part_tuple1, part_tuple2, win=5, track_idx=0):
     parts1 = elocs[:, parts1_idx, :]
     parts2 = elocs[:, parts2_idx, :]
 
-    for p in range(parts1.shape[1]):
-        parts1[:, p, :] = smooth(parts1[:, p, :], win=win)
-        parts2[:, p, :] = smooth(parts2[:, p, :], win=win)
+    if win is not None:
+        for p in range(parts1.shape[1]):
+            parts1[:, p, :] = smooth(parts1[:, p, :], win=win)
+            parts2[:, p, :] = smooth(parts2[:, p, :], win=win)
 
     vec1 = np.diff(parts1, axis=1).squeeze()
     vec2 = np.diff(parts2, axis=1).squeeze()

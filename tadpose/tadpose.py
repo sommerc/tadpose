@@ -1,4 +1,5 @@
 import os
+from random import gauss
 import cv2
 import h5py
 import warnings
@@ -98,6 +99,21 @@ class SleapTadpole(Tadpole):
     def nframes(self):
         return len(self.tracks)
 
+    def _check_frames(self, frames):
+        if frames is None:
+            frames = range(self.nframes)
+        elif isinstance(frames, (list, tuple)) and len(frames) == 2:
+            frames = range(frames[0], frames[1])
+        elif isinstance(frames, (list, tuple)) and len(frames) == 3:
+            frames = range(frames[0], frames[1], frames[2])
+        elif isinstance(frames, (int,)):
+            frames = range(frames, frames + 1)
+        else:
+            raise RuntimeError(
+                "Frames must be integer, a list = [start, end) or [stard, end, step]"
+            )
+        return frames
+
     @lru_cache()
     def __getitem__(self, track_idx):
         assert track_idx < len(self), "track does not exist, go away"
@@ -178,12 +194,7 @@ class SleapTadpole(Tadpole):
         return np.rot90(out_img.squeeze(), k=2)
 
     def ego_image_gen(self, frames=None, track_idx=0, dest_height=100, dest_width=100):
-        if frames is None:
-            frames = range(self.nframes)
-        elif isinstance(frames, (list, tuple)) and len(frames) == 2:
-            frames = range(frames[0], frames[1])
-        else:
-            raise RuntimeError("Frames must be integer or list of [start, end]")
+        frames = self._check_frames(frames)
 
         if not self._vid_handle:
             self._vid_handle = cv2.VideoCapture(self.video_fn)
@@ -211,6 +222,7 @@ class SleapTadpole(Tadpole):
         return out_img
 
     def video_gif(self, frames=None, dest_width=150, dest_height=300):
+        frames = self._check_frames(frames)
         import imageio
         from IPython.display import Image, display
 
@@ -223,23 +235,35 @@ class SleapTadpole(Tadpole):
         with open(".temp.gif", "rb") as file:
             display(Image(file.read(), format="png"))
 
-    def speed(self, frames=None, track_idx=0):
-        pass  #
+    def speed(self, part, frames=None, track_idx=0, sigma=0):
+        frames = self._check_frames(frames)
 
-    def acceleration(self, frames=None, track_idx=0):
-        pass
+        part_loc = self.locs(parts=(part,), track_idx=track_idx).squeeze()[frames]
+        part_disp = np.gradient(part_loc, axis=0)
+        speed = np.linalg.norm(part_disp, axis=1)
+
+        if sigma > 0:
+            speed = utils.gaussian_filter1d(speed, sigma)
+
+        return speed
+
+    def acceleration(self, part, frames=None, track_idx=0, sigma=0):
+        frames = self._check_frames(frames)
+
+        part_loc = self.locs(parts=(part,), track_idx=track_idx).squeeze()[frames]
+        part_disp = np.gradient(part_loc, axis=0)
+        part_disp2 = np.gradient(part_disp, axis=0)
+        speed = np.linalg.norm(part_disp2, axis=1)
+
+        if sigma > 0:
+            speed = utils.gaussian_filter1d(speed, sigma)
+
+        return speed
 
     def spline_curvature(
         self, parts, frames=None, track_idx=0, n_interpolants=64, sigma=0
     ):
-        if frames is None:
-            frames = range(self.nframes)
-        elif isinstance(frames, (list, tuple)) and len(frames) == 2:
-            frames = range(frames[0], frames[1])
-        elif isinstance(frames, (int,)):
-            frames = range(frames, frames + 1)
-        else:
-            raise RuntimeError("Frames must be integer or list of [start, end]")
+        frames = self._check_frames(frames)
 
         parts_positions = self.ego_locs(parts=tuple(parts), track_idx=track_idx)[frames]
 
@@ -249,20 +273,13 @@ class SleapTadpole(Tadpole):
 
         return np.stack(list(map(get_curvature, parts_positions)))
 
-    def parts_detected(self, parts, frames=None, track_idx=0):
-        if frames is None:
-            frames = range(self.nframes)
-        elif isinstance(frames, (list, tuple)) and len(frames) == 2:
-            frames = range(frames[0], frames[1])
-        elif isinstance(frames, (int,)):
-            frames = range(frames, frames + 1)
-        else:
-            raise RuntimeError("Frames must be integer or list of [start, end]")
+    def parts_detected(self, parts=None, frames=None, track_idx=0):
+        frames = self._check_frames(frames)
+
+        if parts is None:
+            parts = self.bodyparts
 
         parts_idx = [self.bodyparts.index(p) for p in parts]
-
-        print(parts_idx)
-        print(frames)
 
         return np.logical_not(
             np.isnan(self.tracks[frames][:, parts_idx, 0, track_idx])
@@ -294,18 +311,20 @@ class SleapTadpole(Tadpole):
         return f"{self.video_fn}.predictions.analysis.h5"
 
     def export_ego_movie(
-        self, frames=None, shape=(224, 244), track_idx=0, suffix="aligned",
+        self, frames=None, shape=(224, 244), track_idx=0, suffix="aligned", out_fn=None
     ):
         from .utils import VideoProcessorCV as vp
 
-        out_mov = f"{self.vid_path}/{self.vid_fn}_{track_idx:02}_{suffix}.mp4"
+        frames = self._check_frames(frames)
+
+        if out_fn is None:
+            out_mov = f"{self.vid_path}/{self.vid_fn}_{track_idx:02}_{suffix}.mp4"
+        else:
+            out_mov = out_fn
         print(f"Export to: {out_mov}")
 
         dest_height, dest_width = shape
         clip = vp(sname=out_mov, codec="mp4v", sw=dest_width, sh=dest_height)
-
-        if frames is None:
-            frames = [0, len(self.tracks)]
 
         for img in tqdm(
             self.ego_image_gen(frames, track_idx, dest_height, dest_width),
