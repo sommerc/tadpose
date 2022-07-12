@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 
+from skimage import measure
 from scipy import interpolate
 from scipy.ndimage import gaussian_filter1d
 
@@ -63,7 +64,16 @@ def angles(tad, part_tuple1, part_tuple2, win=5, track_idx=0):
     return angles
 
 
-class ReparametrizedSplineFit:  #
+def episodes_iter(criteria, min_len=0, max_len=np.Inf):
+    label_t = measure.label(criteria)[:, None]
+    for rp in measure.regionprops(label_t):
+        start = rp.slice[0].start
+        stop = rp.slice[0].stop
+        if max_len > (stop - start) > min_len:
+            yield start, stop
+
+
+class ReparametrizedSplineFit:
     def __init__(self, points, n_interpolants=64):
         self.points = points
         self.n_interpolants = n_interpolants

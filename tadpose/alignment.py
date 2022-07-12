@@ -3,7 +3,6 @@ from tqdm.auto import tqdm
 from skimage import transform as st
 from scipy.ndimage import map_coordinates
 
-# from skimage.draw import disk, line, line_aa
 
 from tadpose import utils
 
@@ -87,7 +86,7 @@ class TadpoleAligner:
 
     # def export_movie(
     #     self,
-    #     tadpole,
+    #     tadpole,4
     #     movie_in,
     #     movie_out,
     #     dest_height=740,

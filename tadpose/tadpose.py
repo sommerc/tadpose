@@ -214,7 +214,7 @@ class SleapTadpole(Tadpole):
             self._vid_handle = cv2.VideoCapture(self.video_fn)
 
         self._vid_handle.set(cv2.cv2.CAP_PROP_POS_FRAMES, frame)
-        res, out_img = self._vid_handle.read()
+        _, out_img = self._vid_handle.read()
 
         if not rgb:
             out_img = out_img[..., 0]
