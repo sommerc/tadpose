@@ -221,13 +221,16 @@ class SleapTadpole(Tadpole):
 
         return out_img
 
-    def video_gif(self, frames=None, dest_width=150, dest_height=300):
+    def video_gif(self, frames=None, dest_width=150, dest_height=300, track_idx=0):
         import imageio
         from IPython.display import Image, display
 
         with imageio.get_writer(".temp.gif", mode="I") as writer:
             for image in self.ego_image_gen(
-                frames, dest_width=dest_width, dest_height=dest_height
+                frames,
+                dest_width=dest_width,
+                dest_height=dest_height,
+                track_idx=track_idx,
             ):
                 writer.append_data(image)
 
