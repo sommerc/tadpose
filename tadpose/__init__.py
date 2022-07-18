@@ -5,4 +5,4 @@ from . import analysis
 from . import alignment
 from . import plot
 
-from .tadpose import Tadpole
+from .tadpose import Tadpole, BatchGrouper

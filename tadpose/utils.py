@@ -9,9 +9,25 @@ from scipy.ndimage import gaussian_filter1d
 
 import re
 import glob
+import roifile
 import tkinter as tk
 from tkinter import filedialog
 from collections import defaultdict
+
+
+def calibrate_by_dish(tad, dish_diamter_in_cm):
+    """ Return pixel size in cm from the dish diamter
+        Note, this needs a Fiji .roi file with a Circle ROI
+        matching the dish bottom.
+    """
+    roi_fn = tad.video_fn[:-4] + ".roi"
+    assert os.path.exists(
+        roi_fn
+    ), ".roi file does not exist. Use Fiji to create a <movie-name>.roi file"
+    roi = roifile.roiread(roi_fn)
+    dish_diam_px = roi.right - roi.left
+
+    return dish_diamter_in_cm / dish_diam_px
 
 
 def dir_select_dialog():
