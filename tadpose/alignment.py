@@ -1,3 +1,4 @@
+from re import S
 import numpy as np
 from tqdm.auto import tqdm
 from skimage import transform as st
@@ -5,6 +6,101 @@ from scipy.ndimage import map_coordinates
 
 
 from tadpose import utils
+
+
+def angles(vec1, vec2):
+    vec1 = (vec1.T / np.linalg.norm(vec1, axis=1)).T
+    vec2 = (vec2.T / np.linalg.norm(vec2, axis=1)).T
+
+    ortho_vec1 = np.c_[-vec1[:, 1], vec1[:, 0]]
+    sign = np.sign(np.sum(ortho_vec1 * vec2, axis=1))
+
+    c = np.sum(vec1 * vec2, axis=1)
+    angles = sign * np.arccos(np.clip(c, -1, 1))
+    return angles
+
+
+class RotationalAligner:
+    def __init__(self, alignment_dict, scale=False, smooth_sigma=None):
+        self.alignment_dict = alignment_dict
+        self.scale = scale
+
+        self.Q = np.stack(list(alignment_dict.values()), axis=0)
+        self.bodyparts_to_align = list(alignment_dict.keys())
+
+        self.smooth_sigma = smooth_sigma
+
+        self.alignment_matrices = {}
+        self.transformations = {}
+
+    def fit(self, track_idx, all_bodyparts, all_locations):
+        part_idx = [all_bodyparts.index(p) for p in self.bodyparts_to_align]
+        Ps = all_locations[:, part_idx, ...]
+
+        if self.smooth_sigma is not None:
+            for p in range(Ps.shape[1]):
+                Ps[:, p] = utils.smooth_gaussian(Ps[:, p], sigma=self.smooth_sigma)
+
+        Ts = -Ps[:, 0].copy()
+        Os = np.ones_like(Ts)
+
+        Os[:, 0] = 0
+
+        ang = angles(Ps[:, 1] + Ts, Os)
+
+        c = np.cos(ang)
+        s = np.sin(ang)
+
+        rot_mats = np.array([[c, -s], [s, c]]).T
+
+        n = len(Ps)
+        transformations = [None] * n
+
+        for i, rmat in enumerate(rot_mats):
+
+            hom = np.zeros((3, 3))
+            hom[2, 2] = 1
+            hom[:2, :2] = rmat.T
+            hom[:2, 2] = -(rmat.T @ -Ts[i])
+
+            transformations[i] = st.EuclideanTransform(matrix=hom)
+
+        self.alignment_matrices[track_idx] = (rot_mats, Ts)
+        self.transformations[track_idx] = transformations
+
+    def transform(self, track_idx, locations):
+        Rs, Ts = self.alignment_matrices[track_idx]
+
+        return (locations + Ts[:, None, :]) @ Rs
+
+    def warp_image(
+        self, image, trans, dest_height, dest_width,
+    ):
+        # xy coords (needed for LA)
+        dbb_coords = np.meshgrid(
+            np.linspace(-dest_width // 2, dest_width // 2, dest_width),
+            np.linspace(-dest_height // 2, dest_height // 2, dest_height),
+        )
+
+        dbb_coords = np.stack([dbb_coords[0].ravel(), dbb_coords[1].ravel()], axis=1)
+
+        sbb_coords = trans.inverse(dbb_coords).T.reshape(2, dest_height, dest_width)
+
+        # flip xy coords to ij, for image extraction
+        sbb_coords = sbb_coords[::-1, ...]
+
+        if image.ndim == 2:
+            image = image[..., None]
+
+        nchan = image.shape[2]
+
+        image_trans = np.zeros(sbb_coords.shape[1:] + (nchan,), dtype="uint8")
+        for c in range(nchan):
+            image_trans[..., c] = map_coordinates(
+                image[:, :, nchan - c - 1], sbb_coords, order=1, prefilter=False
+            )  # BGR -> RGB
+
+        return image_trans
 
 
 class TadpoleAligner:
