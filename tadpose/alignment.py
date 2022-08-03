@@ -21,15 +21,9 @@ def angles(vec1, vec2):
 
 
 class RotationalAligner:
-    def __init__(self, alignment_dict, scale=False, smooth_sigma=None):
-        self.alignment_dict = alignment_dict
-        self.scale = scale
-
-        self.Q = np.stack(list(alignment_dict.values()), axis=0)
-        self.bodyparts_to_align = list(alignment_dict.keys())
-
+    def __init__(self, central_part, aligned_part, smooth_sigma=None):
+        self.bodyparts_to_align = [central_part, aligned_part]
         self.smooth_sigma = smooth_sigma
-
         self.alignment_matrices = {}
         self.transformations = {}
 
