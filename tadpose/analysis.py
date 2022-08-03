@@ -108,6 +108,9 @@ class ReparametrizedSplineFit:
 
         return K
 
+    def interpolate(self, sigma=0):
+        return self.spline(self.s)
+
 
 # def get_rotation_angle(Rs):
 #     return np.rad2deg(np.arctan2(Rs[:, 1, 0], -Rs[:, 0, 0],))

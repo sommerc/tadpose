@@ -275,6 +275,19 @@ class SleapTadpole(Tadpole):
 
         return np.stack(list(map(get_curvature, parts_positions)))
 
+    def spline_interpolate(
+        self, parts, frames=None, track_idx=0, n_interpolants=64,
+    ):
+        frames = self._check_frames(frames)
+
+        parts_positions = self.ego_locs(parts=tuple(parts), track_idx=track_idx)[frames]
+
+        get_curvature = lambda points: analysis.ReparametrizedSplineFit(
+            points, n_interpolants
+        ).interpolate()
+
+        return np.stack(list(map(get_curvature, parts_positions)))
+
     def parts_detected(self, parts=None, frames=None, track_idx=0):
         frames = self._check_frames(frames)
 
