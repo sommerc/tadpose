@@ -5,7 +5,7 @@ from skimage import measure
 from scipy import interpolate
 from scipy.ndimage import gaussian_filter1d
 
-from .utils import smooth_diff, smooth
+from .utils import angles_of_vectors, smooth_diff, smooth
 
 
 def ego_speeds(tadpole, parts=None):
@@ -53,15 +53,7 @@ def angles(tad, part_tuple1, part_tuple2, win=5, track_idx=0):
     vec1 = np.diff(parts1, axis=1).squeeze()
     vec2 = np.diff(parts2, axis=1).squeeze()
 
-    vec1 = (vec1.T / np.linalg.norm(vec1, axis=1)).T
-    vec2 = (vec2.T / np.linalg.norm(vec2, axis=1)).T
-
-    ortho_vec1 = np.c_[-vec1[:, 1], vec1[:, 0]]
-    sign = np.sign(np.sum(ortho_vec1 * vec2, axis=1))
-
-    c = np.sum(vec1 * vec2, axis=1)
-    angles = sign * np.rad2deg(np.arccos(np.clip(c, -1, 1)))
-    return angles
+    return angles_of_vectors(vec1, vec2)
 
 
 def episodes_iter(criteria, min_len=0, max_len=np.Inf):
@@ -110,19 +102,4 @@ class ReparametrizedSplineFit:
 
     def interpolate(self, sigma=0):
         return self.spline(self.s)
-
-
-# def get_rotation_angle(Rs):
-#     return np.rad2deg(np.arctan2(Rs[:, 1, 0], -Rs[:, 0, 0],))
-
-
-# def get_singed_angular_speed(Rs):
-#     return np.array(
-#         list(
-#             map(
-#                 lambda a: a if abs(a) < 180 else 360 - abs(a),
-#                 np.diff(get_rotation_angle(Rs)),
-#             )
-#         )
-#     )
 
