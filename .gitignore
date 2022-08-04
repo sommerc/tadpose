@@ -4,4 +4,13 @@ tadpose.egg-info/
 *.mp4
 *.png
 *.txt
+*.ipynb
+*.h5
+*.json
+*.pdf
+*.slp
+*.db
+*.gif
+*.csv
+*.tab
 assets/*
