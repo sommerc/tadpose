@@ -191,7 +191,31 @@ class SleapTadpole(Tadpole):
             )
 
         return out_img.squeeze()
-        return np.rot90(out_img.squeeze(), k=2)
+
+    def ego_plot(
+        self, frame, parts, track_idx=0, dest_height=320, dest_width=160, ax=None
+    ):
+        ego_img = self.ego_image(
+            frame=frame,
+            parts=parts,
+            track_idx=track_idx,
+            dest_height=dest_height,
+            dest_width=dest_width,
+        )
+        ego_locs = self.ego_locs(
+            track_idx=track_idx, parts=tuple(parts), fill_missing=False
+        )[frame]
+
+        if ax is None:
+            _, ax = matplotlib.pyplot.subplots()
+        ax.imshow(
+            ego_img,
+            "gray",
+            origin="lower",
+            extent=[-dest_width / 2, dest_width / 2, -dest_height / 2, dest_height / 2],
+        )
+        ax.plot(*ego_locs.T, ".-")
+        return ax
 
     def ego_image_gen(self, frames=None, track_idx=0, dest_height=100, dest_width=100):
         frames = self._check_frames(frames)
