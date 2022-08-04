@@ -17,6 +17,11 @@ class RotationalAligner:
         self.transformations = {}
 
     def fit(self, track_idx, all_bodyparts, all_locations):
+        for bp in self.bodyparts_to_align:
+            assert (
+                bp in all_bodyparts
+            ), f"Part in alignmend '{bp}' is not in list of bodyparts: {all_bodyparts}"
+
         part_idx = [all_bodyparts.index(p) for p in self.bodyparts_to_align]
         Ps = all_locations[:, part_idx, ...]
 
