@@ -1,5 +1,7 @@
 import numpy as np
+import scipy as sp
 import pandas as pd
+
 
 from skimage import measure
 from scipy import interpolate
@@ -66,40 +68,38 @@ def episodes_iter(criteria, min_len=0, max_len=np.Inf):
 
 
 class ReparametrizedSplineFit:
-    def __init__(self, points, n_interpolants=64):
+    def __init__(self, points, n_interpolants=64, spline_smooth=0):
         self.points = points
         self.n_interpolants = n_interpolants
 
-        s_inter = np.linspace(0, len(points), n_interpolants)
+        dist_points = np.linalg.norm(np.diff(points, axis=0), axis=1)
+        arclen_cum = np.concatenate(([0], dist_points.cumsum()))
 
-        s_init = np.linspace(0, len(points), len(points))
-        spl_points = interpolate.CubicSpline(s_init, points, bc_type="natural")
+        spline_init, u = sp.interpolate.splprep(points.T, u=arclen_cum, s=spline_smooth)
 
-        points_inter = spl_points(s_inter)
+        eval_points = np.linspace(0, arclen_cum[-1], n_interpolants)
+        points_eval = sp.interpolate.splev(eval_points, spline_init)
+        points_eval = np.stack(points_eval, -1)
 
-        points_tangents = spl_points.derivative(1)(s_inter)
+        dist_points_eval = np.linalg.norm(np.diff(points_eval, axis=0), axis=1)
+        arclen = np.concatenate(([0], dist_points_eval.cumsum()))
+        arclen /= arclen[-1]
 
-        arc_len = np.cumsum(np.linalg.norm(points_tangents, axis=1))
-        self.points_arc_length = arc_len
+        self.arclen = arclen
+        self.spline, u = sp.interpolate.splprep(
+            points_eval.T, u=arclen, s=spline_smooth
+        )
 
-        arc_len = arc_len / arc_len.max() * n_interpolants
-        arc_len = np.r_[[0], arc_len[:-1]]
-
-        self.s = np.linspace(0, n_interpolants, n_interpolants)
-        self.spline = interpolate.CubicSpline(arc_len, points_inter, bc_type="natural")
-
-    def singed_curvature(self, sigma=0):
-        xp, yp = self.spline.derivative(1)(self.s).T
-        xpp, ypp = self.spline.derivative(2)(self.s).T
+    def singed_curvature(self):
+        xp, yp = sp.interpolate.splev(self.arclen, self.spline, der=1)
+        xpp, ypp = sp.interpolate.splev(self.arclen, self.spline, der=2)
 
         mixed_term = xp * ypp - yp * xpp
         norm_term = (xp ** 2 + yp ** 2) ** (3 / 2)
         K = mixed_term / norm_term
-        if sigma > 0:
-            K = gaussian_filter1d(K, sigma)
 
         return K
 
-    def interpolate(self, sigma=0):
-        return self.spline(self.s)
+    def interpolate(self):
+        return np.stack(sp.interpolate.splev(self.arclen, self.spline, der=0), axis=1)
 

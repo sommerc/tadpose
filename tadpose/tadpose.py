@@ -287,27 +287,27 @@ class SleapTadpole(Tadpole):
         return speed
 
     def spline_curvature(
-        self, parts, frames=None, track_idx=0, n_interpolants=64, sigma=0
+        self, parts, frames=None, track_idx=0, n_interpolants=64, spline_smooth=0
     ):
         frames = self._check_frames(frames)
 
         parts_positions = self.ego_locs(parts=tuple(parts), track_idx=track_idx)[frames]
 
         get_curvature = lambda points: analysis.ReparametrizedSplineFit(
-            points, n_interpolants
-        ).singed_curvature(sigma)
+            points, n_interpolants, spline_smooth
+        ).singed_curvature()
 
         return np.stack(list(map(get_curvature, parts_positions)))
 
     def spline_interpolate(
-        self, parts, frames=None, track_idx=0, n_interpolants=64,
+        self, parts, frames=None, track_idx=0, n_interpolants=64, spline_smooth=0
     ):
         frames = self._check_frames(frames)
 
         parts_positions = self.ego_locs(parts=tuple(parts), track_idx=track_idx)[frames]
 
         get_curvature = lambda points: analysis.ReparametrizedSplineFit(
-            points, n_interpolants
+            points, n_interpolants, spline_smooth
         ).interpolate()
 
         return np.stack(list(map(get_curvature, parts_positions)))
