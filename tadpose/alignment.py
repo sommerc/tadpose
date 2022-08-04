@@ -8,22 +8,11 @@ from scipy.ndimage import map_coordinates
 from tadpose import utils
 
 
-def angles(vec1, vec2):
-    vec1 = (vec1.T / np.linalg.norm(vec1, axis=1)).T
-    vec2 = (vec2.T / np.linalg.norm(vec2, axis=1)).T
-
-    ortho_vec1 = np.c_[-vec1[:, 1], vec1[:, 0]]
-    sign = np.sign(np.sum(ortho_vec1 * vec2, axis=1))
-
-    c = np.sum(vec1 * vec2, axis=1)
-    angles = sign * np.arccos(np.clip(c, -1, 1))
-    return angles
-
-
 class RotationalAligner:
-    def __init__(self, central_part, aligned_part, smooth_sigma=None):
+    def __init__(self, central_part, aligned_part, smooth_sigma=None, align_to=(0, 1)):
         self.bodyparts_to_align = [central_part, aligned_part]
         self.smooth_sigma = smooth_sigma
+        self.align_to = align_to
         self.alignment_matrices = {}
         self.transformations = {}
 
@@ -35,13 +24,17 @@ class RotationalAligner:
             for p in range(Ps.shape[1]):
                 Ps[:, p] = utils.smooth_gaussian(Ps[:, p], sigma=self.smooth_sigma)
 
+        # the translation which makes central part 0
         Ts = -Ps[:, 0].copy()
-        Os = np.ones_like(Ts)
 
-        Os[:, 0] = 0
+        # Vector to which aligned_part is aligned to
+        Os = np.zeros_like(Ts)
+        Os[:] = self.align_to
 
-        ang = angles(Ps[:, 1] + Ts, Os)
+        # compute angles for all
+        ang = utils.angles_of_vectors(Ps[:, 1] + Ts, Os)
 
+        # get rotation matrix
         c = np.cos(ang)
         s = np.sin(ang)
 
@@ -50,8 +43,8 @@ class RotationalAligner:
         n = len(Ps)
         transformations = [None] * n
 
+        # create skimage transformation objects (needed for image warping)
         for i, rmat in enumerate(rot_mats):
-
             hom = np.zeros((3, 3))
             hom[2, 2] = 1
             hom[:2, :2] = rmat.T
@@ -59,12 +52,12 @@ class RotationalAligner:
 
             transformations[i] = st.EuclideanTransform(matrix=hom)
 
+        # save transformations for later (transform)
         self.alignment_matrices[track_idx] = (rot_mats, Ts)
         self.transformations[track_idx] = transformations
 
     def transform(self, track_idx, locations):
         Rs, Ts = self.alignment_matrices[track_idx]
-
         return (locations + Ts[:, None, :]) @ Rs
 
     def warp_image(

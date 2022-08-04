@@ -149,6 +149,19 @@ def fill_missing(Y, kind="linear"):
     return Y
 
 
+def angles_of_vectors(vec1, vec2):
+    """Compute angles of (vectorized) of 2 nx2 vector arrays"""
+    vec1 = (vec1.T / np.linalg.norm(vec1, axis=1)).T
+    vec2 = (vec2.T / np.linalg.norm(vec2, axis=1)).T
+
+    ortho_vec1 = np.c_[-vec1[:, 1], vec1[:, 0]]
+    sign = np.sign(np.sum(ortho_vec1 * vec2, axis=1))
+
+    c = np.sum(vec1 * vec2, axis=1)
+    angles = sign * np.arccos(np.clip(c, -1, 1))
+    return angles
+
+
 def cart2pol(xy):
     rho = np.linalg.norm(xy, axis=-1)
     phi = np.arctan2(xy[..., 1], xy[..., 0])
