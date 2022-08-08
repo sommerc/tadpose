@@ -75,7 +75,9 @@ class ReparametrizedSplineFit:
         dist_points = np.linalg.norm(np.diff(points, axis=0), axis=1)
         arclen_cum = np.concatenate(([0], dist_points.cumsum()))
 
-        spline_init, u = sp.interpolate.splprep(points.T, u=arclen_cum, s=spline_smooth)
+        spline_init, u = sp.interpolate.splprep(
+            points.T, u=arclen_cum, s=spline_smooth,
+        )
 
         eval_points = np.linspace(0, arclen_cum[-1], n_interpolants)
         points_eval = sp.interpolate.splev(eval_points, spline_init)
@@ -85,10 +87,8 @@ class ReparametrizedSplineFit:
         arclen = np.concatenate(([0], dist_points_eval.cumsum()))
         arclen /= arclen[-1]
 
-        self.arclen = arclen
-        self.spline, u = sp.interpolate.splprep(
-            points_eval.T, u=arclen, s=spline_smooth
-        )
+        self.arclen = np.linspace(0, 1, n_interpolants)
+        self.spline, u = sp.interpolate.splprep(points_eval.T, u=arclen, s=0)
 
     def singed_curvature(self):
         xp, yp = sp.interpolate.splev(self.arclen, self.spline, der=1)
@@ -102,4 +102,45 @@ class ReparametrizedSplineFit:
 
     def interpolate(self):
         return np.stack(sp.interpolate.splev(self.arclen, self.spline, der=0), axis=1)
+
+
+from csaps import CubicSmoothingSpline
+
+
+class ReparametrizedCSAPSSplineFit:
+    def __init__(self, points, n_interpolants=64, spline_smooth=1):
+        self.points = points
+        self.n_interpolants = n_interpolants
+
+        arclen_cum = np.concatenate(
+            ([0], np.linalg.norm(np.diff(points, axis=0), axis=1).cumsum())
+        )
+
+        spline_init = CubicSmoothingSpline(
+            arclen_cum, points.T, smooth=spline_smooth, normalizedsmooth=True
+        )
+
+        eval_points = np.linspace(0, arclen_cum[-1], n_interpolants)
+        points_eval = spline_init(eval_points).T
+
+        dist_points_eval = np.linalg.norm(np.diff(points_eval, axis=0), axis=1)
+        arclen = np.concatenate(([0], dist_points_eval.cumsum()))
+        arclen /= arclen[-1]
+
+        self.spline = CubicSmoothingSpline(arclen, points_eval.T, smooth=1)
+
+        self.arclen = np.linspace(0, 1, n_interpolants)
+
+    def singed_curvature(self):
+        xp, yp = self.spline(self.arclen, nu=1)
+        xpp, ypp = self.spline(self.arclen, nu=2)
+
+        mixed_term = xp * ypp - yp * xpp
+        norm_term = (xp ** 2 + yp ** 2) ** (3 / 2)
+        K = mixed_term / norm_term
+
+        return K
+
+    def interpolate(self):
+        return self.spline(self.arclen).T
 

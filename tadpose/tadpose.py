@@ -13,6 +13,9 @@ from functools import lru_cache
 from . import utils, analysis
 
 
+SplineClass = analysis.ReparametrizedCSAPSSplineFit
+
+
 class Tadpole:
     def __init__(self, video_fn, bodyparts_cmap):
         assert os.path.exists(video_fn), f"Movie file '{video_fn}' does not exist"
@@ -287,26 +290,26 @@ class SleapTadpole(Tadpole):
         return speed
 
     def spline_curvature(
-        self, parts, frames=None, track_idx=0, n_interpolants=64, spline_smooth=0
+        self, parts, frames=None, track_idx=0, n_interpolants=64, spline_smooth=1
     ):
         frames = self._check_frames(frames)
 
         parts_positions = self.ego_locs(parts=tuple(parts), track_idx=track_idx)[frames]
 
-        get_curvature = lambda points: analysis.ReparametrizedSplineFit(
+        get_curvature = lambda points: SplineClass(
             points, n_interpolants, spline_smooth
         ).singed_curvature()
 
         return np.stack(list(map(get_curvature, parts_positions)))
 
     def spline_interpolate(
-        self, parts, frames=None, track_idx=0, n_interpolants=64, spline_smooth=0
+        self, parts, frames=None, track_idx=0, n_interpolants=64, spline_smooth=1
     ):
         frames = self._check_frames(frames)
 
         parts_positions = self.ego_locs(parts=tuple(parts), track_idx=track_idx)[frames]
 
-        get_curvature = lambda points: analysis.ReparametrizedSplineFit(
+        get_curvature = lambda points: SplineClass(
             points, n_interpolants, spline_smooth
         ).interpolate()
 
