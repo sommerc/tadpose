@@ -226,7 +226,7 @@ class SleapTadpole(Tadpole):
         if not self._vid_handle:
             self._vid_handle = cv2.VideoCapture(self.video_fn)
 
-        self._vid_handle.set(cv2.cv2.CAP_PROP_POS_FRAMES, frames[0])
+        self._vid_handle.set(cv2.CAP_PROP_POS_FRAMES, frames[0])
 
         for frame in frames:
             trans = self.aligner.transformations[track_idx][frame]
@@ -240,7 +240,7 @@ class SleapTadpole(Tadpole):
         if not self._vid_handle:
             self._vid_handle = cv2.VideoCapture(self.video_fn)
 
-        self._vid_handle.set(cv2.cv2.CAP_PROP_POS_FRAMES, frame)
+        self._vid_handle.set(cv2.CAP_PROP_POS_FRAMES, frame)
         _, out_img = self._vid_handle.read()
 
         if not rgb:
