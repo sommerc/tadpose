@@ -181,7 +181,7 @@ class SleapTadpole(Tadpole):
         if not self._vid_handle:
             self._vid_handle = cv2.VideoCapture(self.video_fn)
 
-        self._vid_handle.set(cv2.cv2.CAP_PROP_POS_FRAMES, frames[0])
+        self._vid_handle.set(cv2.CAP_PROP_POS_FRAMES, frames[0])
 
         out_img = np.zeros((len(frames), dest_height, dest_width, 3), dtype="uint8")
 
