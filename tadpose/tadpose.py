@@ -105,12 +105,15 @@ class SleapTadpole(Tadpole):
     def _check_frames(self, frames):
         if frames is None:
             frames = range(self.nframes)
+        elif isinstance(frames, range):
+            pass
         elif isinstance(frames, (list, tuple)) and len(frames) == 2:
             frames = range(frames[0], frames[1])
         elif isinstance(frames, (list, tuple)) and len(frames) == 3:
             frames = range(frames[0], frames[1], frames[2])
         elif isinstance(frames, (int,)):
             frames = range(frames, frames + 1)
+
         else:
             raise RuntimeError(
                 "Frames must be integer, a list = [start, end) or [stard, end, step]"
@@ -288,6 +291,16 @@ class SleapTadpole(Tadpole):
             speed = utils.gaussian_filter1d(speed, sigma)
 
         return speed
+
+    def angles_from_segment(self, parts, frames=None, track_idx=0, win=None):
+        angles = []
+        for a, b, c in zip(parts, parts[1:], parts[2:]):
+            ang = analysis.angles(
+                self, (a, b), (b, c), win=win, track_idx=track_idx, frames=frames
+            )
+            angles.append(ang)
+
+        return np.stack(angles, -1)
 
     def spline_curvature(
         self, parts, frames=None, track_idx=0, n_interpolants=64, spline_smooth=1
