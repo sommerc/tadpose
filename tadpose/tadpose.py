@@ -70,18 +70,23 @@ class Tadpole:
 
     @aligner.setter
     def aligner(self, ta):
-        for track_idx in trange(len(self), desc="Aligning animals"):
+        if hasattr(ta, "tracks_to_align"):
+            tids = ta.tracks_to_align
+        else:
+            tids = range(len(self))
+
+        for track_idx in tqdm(tids, desc="Aligning animals"):
             all_locations = self.locs(track_idx=track_idx)
             ta.fit(track_idx, self.bodyparts, all_locations)
         self._aligner = ta
 
-    @property
-    @lru_cache()  ### TOTO proper cache for multi-animal
-    def aligned_locations(self):
-        warnings.warn(
-            "\n\nPlease DO NOT use 'aligned_locations' and 'locations' anymore.\nWill be removed soon.\n Use 'tad.ego_locs() to get np array of aligned locations\n\n'"
-        )
-        return self._aligner.align(self)
+    # @property
+    # @lru_cache()  ### TOTO proper cache for multi-animal
+    # def aligned_locations(self):
+    #     warnings.warn(
+    #         "\n\nPlease DO NOT use 'aligned_locations' and 'locations' anymore.\nWill be removed soon.\n Use 'tad.ego_locs() to get np array of aligned locations\n\n'"
+    #     )
+    #     return self._aligner.align(self)
 
 
 class SleapTadpole(Tadpole):
@@ -120,23 +125,23 @@ class SleapTadpole(Tadpole):
             )
         return frames
 
-    @lru_cache()
-    def __getitem__(self, track_idx):
-        assert track_idx < len(self), "track does not exist, go away"
-        tracks = self.tracks[..., track_idx]
-        liklihoods = 1.0 - np.isnan(self.tracks[:, :, 0, track_idx])
+    # @lru_cache()
+    # def __getitem__(self, track_idx):
+    #     assert track_idx < len(self), "track does not exist, go away"
+    #     tracks = self.tracks[..., track_idx]
+    #     liklihoods = 1.0 - np.isnan(self.tracks[:, :, 0, track_idx])
 
-        coords = ["x", "y", "likelihood"]
+    #     coords = ["x", "y", "likelihood"]
 
-        liklihoods = liklihoods[..., None]
+    #     liklihoods = liklihoods[..., None]
 
-        tracks = np.concatenate([tracks, liklihoods], axis=2)
-        df = pd.DataFrame(tracks.reshape(len(tracks), -1))
-        df.columns = pd.MultiIndex.from_product([self.bodyparts, coords])
+    #     tracks = np.concatenate([tracks, liklihoods], axis=2)
+    #     df = pd.DataFrame(tracks.reshape(len(tracks), -1))
+    #     df.columns = pd.MultiIndex.from_product([self.bodyparts, coords])
 
-        return df
+    #     return df
 
-    @lru_cache()
+    # @lru_cache()
     def locs(self, track_idx=0, parts=None, fill_missing=True):
         tracks = self.tracks[..., track_idx]
 
@@ -151,7 +156,7 @@ class SleapTadpole(Tadpole):
 
         return tracks
 
-    @lru_cache()
+    # @lru_cache()
     def ego_locs(self, track_idx=0, parts=None, fill_missing=True):
         locations = self.locs(
             track_idx=track_idx, parts=parts, fill_missing=fill_missing
@@ -193,7 +198,10 @@ class SleapTadpole(Tadpole):
             _, in_img = self._vid_handle.read()
 
             out_img[k] = self.aligner.warp_image(
-                in_img, trans, dest_height, dest_width,
+                in_img,
+                trans,
+                dest_height,
+                dest_width,
             )
 
         return out_img.squeeze()
@@ -236,7 +244,10 @@ class SleapTadpole(Tadpole):
             _, in_img = self._vid_handle.read()
 
             yield self.aligner.warp_image(
-                in_img, trans, dest_height, dest_width,
+                in_img,
+                trans,
+                dest_height,
+                dest_width,
             )
 
     def image(self, frame, rgb=False):
@@ -267,10 +278,15 @@ class SleapTadpole(Tadpole):
         with open(".temp.gif", "rb") as file:
             display(Image(file.read(), format="png"))
 
-    def speed(self, part, frames=None, track_idx=0, sigma=0):
+    def speed(self, part, frames=None, track_idx=0, pre_sigma=0, sigma=0):
         frames = self._check_frames(frames)
 
         part_loc = self.locs(parts=(part,), track_idx=track_idx).squeeze()[frames]
+
+        if pre_sigma > 0:
+            for c in range(2):
+                part_loc[:, c] = utils.gaussian_filter1d(part_loc[:, c], pre_sigma)
+
         part_disp = np.gradient(part_loc, axis=0)
         speed = np.linalg.norm(part_disp, axis=1)
 
@@ -395,12 +411,12 @@ class DeeplabcutTadpole(Tadpole):
         self.scorer = scorer
 
     @property
-    @lru_cache()
+    # @lru_cache()
     def locations(self):
         return pd.read_hdf(self.analysis_file)[self.scorer]
 
     @property
-    @lru_cache()
+    # @lru_cache()
     def bodyparts(self):
         return self.locations.columns.get_level_values(0).unique().tolist()
 
@@ -425,7 +441,9 @@ class BatchGrouper:
     def __iter__(self):
         for grp, df_grp in self.exp_table.groupby(self.output_grouped_by):
             for ind, row in df_grp.iterrows():
-                tadpole = Tadpole.from_sleap(row["FullPath"],)
+                tadpole = Tadpole.from_sleap(
+                    row["FullPath"],
+                )
                 tadpole.aligner = self.aligner
 
                 yield tadpole, grp, ind, row
