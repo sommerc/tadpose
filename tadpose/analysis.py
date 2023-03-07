@@ -36,7 +36,7 @@ def speeds(tadpole, parts=None):
     return pd.DataFrame(speeds, columns=parts)
 
 
-def angles(tad, part_tuple1, part_tuple2, win=5, track_idx=0, frames=None):
+def angles(tad, part_tuple1, part_tuple2, win=None, track_idx=0, frames=None):
     frames = tad._check_frames(frames)
     elocs = tad.ego_locs(track_idx=track_idx)[frames].copy()
 
@@ -77,7 +77,9 @@ class ReparametrizedSplineFit:
         arclen_cum = np.concatenate(([0], dist_points.cumsum()))
 
         spline_init, u = sp.interpolate.splprep(
-            points.T, u=arclen_cum, s=spline_smooth,
+            points.T,
+            u=arclen_cum,
+            s=spline_smooth,
         )
 
         eval_points = np.linspace(0, arclen_cum[-1], n_interpolants)
@@ -96,7 +98,7 @@ class ReparametrizedSplineFit:
         xpp, ypp = sp.interpolate.splev(self.arclen, self.spline, der=2)
 
         mixed_term = xp * ypp - yp * xpp
-        norm_term = (xp ** 2 + yp ** 2) ** (3 / 2)
+        norm_term = (xp**2 + yp**2) ** (3 / 2)
         K = mixed_term / norm_term
 
         return K
@@ -137,11 +139,10 @@ class ReparametrizedCSAPSSplineFit:
         xpp, ypp = self.spline(self.arclen, nu=2)
 
         mixed_term = xp * ypp - yp * xpp
-        norm_term = (xp ** 2 + yp ** 2) ** (3 / 2)
+        norm_term = (xp**2 + yp**2) ** (3 / 2)
         K = mixed_term / norm_term
 
         return K
 
     def interpolate(self):
         return self.spline(self.arclen).T
-

@@ -2,6 +2,7 @@ import os
 from random import gauss
 import cv2
 import h5py
+import json
 import warnings
 import matplotlib
 import numpy as np
@@ -29,6 +30,12 @@ class Tadpole:
         self._aligner = None
 
         self._vid_handle = None
+
+        self.info = {}
+        self.json_fn = f"{self.vid_path}/{self.vid_fn}.json"
+        if os.path.exists(self.json_fn):
+            with open(self.json_fn) as f:
+                self.info = json.load(f)
 
     @staticmethod
     def from_dlc(video_fn, scorer, bodyparts_cmap="jet"):
@@ -75,7 +82,8 @@ class Tadpole:
         else:
             tids = range(len(self))
 
-        for track_idx in tqdm(tids, desc="Aligning animals"):
+        # for track_idx in tqdm(tids, desc="Aligning animals"):
+        for track_idx in tids:
             all_locations = self.locs(track_idx=track_idx)
             ta.fit(track_idx, self.bodyparts, all_locations)
         self._aligner = ta
@@ -99,6 +107,16 @@ class SleapTadpole(Tadpole):
             self._bodyparts = list(map(lambda x: x.decode(), hf["node_names"]))
 
         self.current_track = 0
+
+        if "mutant_side" in self.info and self.info["mutant_side"] == "right":
+            print("mirror LR in locs")
+
+            cap = cv2.VideoCapture(self.video_fn)
+            width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
+            cap.release()
+
+            self.tracks[..., 0, :] *= -1
+            self.tracks[..., 0, :] += width
 
     def __len__(self):
         return self.tracks.shape[-1]
@@ -165,7 +183,6 @@ class SleapTadpole(Tadpole):
         return self.aligner.transform(track_idx, locations)
 
     def ego_bbox(self, frame, track_idx=0, dest_height=100, dest_width=100):
-
         trans = self.aligner.transformations[track_idx][frame]
 
         dest_shape = [
@@ -196,6 +213,13 @@ class SleapTadpole(Tadpole):
         for k, frame in enumerate(frames):
             trans = self.aligner.transformations[track_idx][frame]
             _, in_img = self._vid_handle.read()
+
+            if "mutant_side" in self.info and self.info["mutant_side"] == "right":
+                print(
+                    "DEBUG: Mutant side 'right' found in info file. Switching to left..."
+                )
+                # in_img = np.flipud(in_img)
+                in_img = np.fliplr(in_img)
 
             out_img[k] = self.aligner.warp_image(
                 in_img,
@@ -243,6 +267,13 @@ class SleapTadpole(Tadpole):
             trans = self.aligner.transformations[track_idx][frame]
             _, in_img = self._vid_handle.read()
 
+            if "mutant_side" in self.info and self.info["mutant_side"] == "right":
+                print(
+                    "DEBUG: Mutant side 'right' found in info file. Switching to left..."
+                )
+                # in_img = np.flipud(in_img)
+                in_img = np.fliplr(in_img)
+
             yield self.aligner.warp_image(
                 in_img,
                 trans,
@@ -256,6 +287,9 @@ class SleapTadpole(Tadpole):
 
         self._vid_handle.set(cv2.CAP_PROP_POS_FRAMES, frame)
         _, out_img = self._vid_handle.read()
+        if "mutant_side" in self.info and self.info["mutant_side"] == "right":
+            print("DEBUG: Mutant side 'right' found in info file. Switching to left...")
+            out_img = np.fliplr(out_img)
 
         if not rgb:
             out_img = out_img[..., 0]

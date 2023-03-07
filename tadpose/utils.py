@@ -16,9 +16,9 @@ from collections import defaultdict
 
 
 def calibrate_by_dish(tad, dish_diamter_in_cm):
-    """ Return pixel size in cm from the dish diamter
-        Note, this needs a Fiji .roi file with a Circle ROI
-        matching the dish bottom.
+    """Return pixel size in cm from the dish diamter
+    Note, this needs a Fiji .roi file with a Circle ROI
+    matching the dish bottom.
     """
     roi_fn = tad.video_fn[:-4] + ".roi"
     assert os.path.exists(
@@ -36,7 +36,8 @@ def dir_select_dialog():
     root.attributes("-topmost", True)
 
     file_name = filedialog.askdirectory(
-        title="Choose folder with .mp4 frog movies", parent=root,
+        title="Choose folder with .mp4 frog movies",
+        parent=root,
     )
     root.destroy()
 
