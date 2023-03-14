@@ -118,6 +118,19 @@ class SleapTadpole(Tadpole):
             self.tracks[..., 0, :] *= -1
             self.tracks[..., 0, :] += width
 
+            mirrored_body_parts = []
+            for bp in self._bodyparts:
+                bp_mirror = bp
+                if "Right" in bp:
+                    bp_mirror = bp.replace("Right", "Left")
+
+                if "Left" in bp:
+                    bp_mirror = bp.replace("Left", "Right")
+
+                mirrored_body_parts.append(bp_mirror)
+
+            self._bodyparts = mirrored_body_parts
+
     def __len__(self):
         return self.tracks.shape[-1]
 
