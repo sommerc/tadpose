@@ -36,9 +36,33 @@ def speeds(tadpole, parts=None):
     return pd.DataFrame(speeds, columns=parts)
 
 
+# OLD: ego locs acutally not needed here
+# def angles(tad, part_tuple1, part_tuple2, win=None, track_idx=0, frames=None):
+#     frames = tad._check_frames(frames)
+#     elocs = tad.ego_locs(track_idx=track_idx)[frames].copy()
+
+#     elocs[..., 0] *= -1
+
+#     parts1_idx = [tad.bodyparts.index(p) for p in part_tuple1]
+#     parts2_idx = [tad.bodyparts.index(p) for p in part_tuple2]
+
+#     parts1 = elocs[:, parts1_idx, :]
+#     parts2 = elocs[:, parts2_idx, :]
+
+#     if win is not None:
+#         for p in range(parts1.shape[1]):
+#             parts1[:, p, :] = smooth(parts1[:, p, :], win=win)
+#             parts2[:, p, :] = smooth(parts2[:, p, :], win=win)
+
+#     vec1 = np.diff(parts1, axis=1).squeeze()
+#     vec2 = np.diff(parts2, axis=1).squeeze()
+
+#     return angles_of_vectors(vec1, vec2)
+
+
 def angles(tad, part_tuple1, part_tuple2, win=None, track_idx=0, frames=None):
     frames = tad._check_frames(frames)
-    elocs = tad.ego_locs(track_idx=track_idx)[frames].copy()
+    elocs = tad.locs(track_idx=track_idx)[frames].copy()
 
     elocs[..., 0] *= -1
 
@@ -49,6 +73,7 @@ def angles(tad, part_tuple1, part_tuple2, win=None, track_idx=0, frames=None):
     parts2 = elocs[:, parts2_idx, :]
 
     if win is not None:
+        print("WARNING: angles(): 'win' parameter depricated")
         for p in range(parts1.shape[1]):
             parts1[:, p, :] = smooth(parts1[:, p, :], win=win)
             parts2[:, p, :] = smooth(parts2[:, p, :], win=win)
