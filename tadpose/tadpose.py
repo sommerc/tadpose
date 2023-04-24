@@ -88,14 +88,6 @@ class Tadpole:
             ta.fit(track_idx, self.bodyparts, all_locations)
         self._aligner = ta
 
-    # @property
-    # @lru_cache()  ### TOTO proper cache for multi-animal
-    # def aligned_locations(self):
-    #     warnings.warn(
-    #         "\n\nPlease DO NOT use 'aligned_locations' and 'locations' anymore.\nWill be removed soon.\n Use 'tad.ego_locs() to get np array of aligned locations\n\n'"
-    #     )
-    #     return self._aligner.align(self)
-
 
 class SleapTadpole(Tadpole):
     def __init__(self, video_fn, bodyparts_cmap, **kwargs):
@@ -399,9 +391,16 @@ class SleapTadpole(Tadpole):
 
         parts_idx = [self.bodyparts.index(p) for p in parts]
 
-        return np.logical_not(
-            np.isnan(self.tracks[frames][:, parts_idx, 0, track_idx])
-        ).T
+        if track_idx is None:
+            res = np.logical_not(
+                np.isnan(self.tracks[frames][:, parts_idx, 0, :])
+            ).squeeze()
+        else:
+            res = np.logical_not(
+                np.isnan(self.tracks[frames][:, parts_idx, 0, track_idx])
+            ).squeeze()
+
+        return res
 
     @property
     def locations(self):
