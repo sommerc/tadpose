@@ -20,7 +20,7 @@ class RotationalAligner:
         for bp in self.bodyparts_to_align:
             assert (
                 bp in all_bodyparts
-            ), f"Part in alignmend '{bp}' is not in list of bodyparts: {all_bodyparts}"
+            ), f"Part in alignment '{bp}' is not in list of bodyparts: {all_bodyparts}"
 
         part_idx = [all_bodyparts.index(p) for p in self.bodyparts_to_align]
         Ps = all_locations[:, part_idx, ...]
@@ -66,7 +66,11 @@ class RotationalAligner:
         return (locations + Ts[:, None, :]) @ Rs
 
     def warp_image(
-        self, image, trans, dest_height, dest_width,
+        self,
+        image,
+        trans,
+        dest_height,
+        dest_width,
     ):
         # xy coords (needed for LA)
         dbb_coords = np.meshgrid(
@@ -144,7 +148,11 @@ class TadpoleAligner:
         return ((locations @ Rs).T).T + (Ts[:, None, :].T / Cs).T
 
     def warp_image(
-        self, image, trans, dest_height, dest_width,
+        self,
+        image,
+        trans,
+        dest_height,
+        dest_width,
     ):
         # xy coords (needed for LA)
         dbb_coords = np.meshgrid(

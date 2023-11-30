@@ -100,8 +100,12 @@ class SleapTadpole(Tadpole):
 
         self.current_track = 0
 
+        if "end_frame" in self.info:
+            print(f"INFO: end frame set to {self.info['end_frame']} for {self.vid_fn}")
+            self.tracks = self.tracks[: self.info["end_frame"]]
+
         if "mutant_side" in self.info and self.info["mutant_side"] == "right":
-            print("mirror LR in locs")
+            print("INFO: Mirror Left-Right for {self.vid_fn}")
 
             cap = cv2.VideoCapture(self.video_fn)
             width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
@@ -164,7 +168,6 @@ class SleapTadpole(Tadpole):
 
     #     return df
 
-    # @lru_cache()
     def locs(self, track_idx=0, parts=None, fill_missing=True):
         tracks = self.tracks[..., track_idx]
 
@@ -179,7 +182,6 @@ class SleapTadpole(Tadpole):
 
         return tracks
 
-    # @lru_cache()
     def ego_locs(self, track_idx=0, parts=None, fill_missing=True):
         locations = self.locs(
             track_idx=track_idx, parts=parts, fill_missing=fill_missing
@@ -263,14 +265,13 @@ class SleapTadpole(Tadpole):
     def ego_image_gen(self, frames=None, track_idx=0, dest_height=100, dest_width=100):
         frames = self._check_frames(frames)
 
-        if not self._vid_handle:
-            self._vid_handle = cv2.VideoCapture(self.video_fn)
+        _vid_handle = cv2.VideoCapture(self.video_fn)
 
-        self._vid_handle.set(cv2.CAP_PROP_POS_FRAMES, frames[0])
+        _vid_handle.set(cv2.CAP_PROP_POS_FRAMES, frames[0])
 
         for frame in frames:
             trans = self.aligner.transformations[track_idx][frame]
-            _, in_img = self._vid_handle.read()
+            _, in_img = _vid_handle.read()
 
             if "mutant_side" in self.info and self.info["mutant_side"] == "right":
                 print(
@@ -285,6 +286,63 @@ class SleapTadpole(Tadpole):
                 dest_height,
                 dest_width,
             )
+
+        _vid_handle.release()
+
+    def bbox_image_gen(
+        self, center_part, frames=None, track_idx=0, dest_height=100, dest_width=100
+    ):
+        frames = self._check_frames(frames)
+
+        _vid_handle = cv2.VideoCapture(self.video_fn)
+
+        _vid_handle.set(cv2.CAP_PROP_POS_FRAMES, frames[0])
+
+        center_part_loc = self.locs(
+            track_idx=track_idx,
+            parts=(center_part,),
+            fill_missing=True,
+        )[:, 0, :]
+
+        center_part_loc = np.round(center_part_loc).astype(int)
+
+        h2 = dest_height // 2
+        w2 = dest_width // 2
+
+        for frame in frames:
+            _, in_img = _vid_handle.read()
+
+            if in_img.shape[-1] == 3:
+                # BGR -> RGB
+                in_img = in_img[..., ::-1]
+
+            if "mutant_side" in self.info and self.info["mutant_side"] == "right":
+                print(
+                    "DEBUG: Mutant side 'right' found in info file. Switching to left..."
+                )
+                # in_img = np.flipud(in_img)
+                in_img = np.fliplr(in_img)
+
+            x, y = center_part_loc[frame]
+
+            xa, xb = max(0, x - w2), min(in_img.shape[1] - 1, x + w2)
+            ya, yb = max(0, y - h2), min(in_img.shape[0] - 1, y + h2)
+
+            bbox_img = in_img[ya:yb, xa:xb]
+
+            if bbox_img.shape[:2] == (dest_height, dest_width):
+                yield bbox_img
+            else:
+                bbox_img_pad = np.zeros(
+                    (dest_height, dest_width) + in_img.shape[2:], dtype=in_img.dtype
+                )
+                bbox_img_pad[
+                    max(0, h2 - y) : max(0, h2 - y) + bbox_img.shape[0],
+                    max(0, w2 - x) : max(0, w2 - x) + bbox_img.shape[1],
+                ] = bbox_img
+                yield bbox_img_pad
+
+        _vid_handle.release()
 
     def image(self, frame, rgb=False):
         if not self._vid_handle:
