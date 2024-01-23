@@ -7,6 +7,7 @@ import warnings
 import matplotlib
 import numpy as np
 import pandas as pd
+from pathlib import Path
 
 from tqdm.auto import tqdm, trange
 from functools import lru_cache
@@ -38,10 +39,8 @@ class Tadpole:
                 self.info = json.load(f)
 
     @staticmethod
-    def from_dlc(video_fn, scorer, bodyparts_cmap="jet"):
-        return DeeplabcutTadpole(
-            video_fn=video_fn, scorer=scorer, bodyparts_cmap=bodyparts_cmap
-        )
+    def from_dlc(video_fn, bodyparts_cmap="jet"):
+        return DeeplabcutTadpole(video_fn=video_fn, bodyparts_cmap=bodyparts_cmap)
 
     @staticmethod
     def from_sleap(video_fn, bodyparts_cmap="rainbow"):
@@ -92,7 +91,7 @@ class Tadpole:
 class SleapTadpole(Tadpole):
     def __init__(self, video_fn, bodyparts_cmap, **kwargs):
         super().__init__(video_fn, bodyparts_cmap)
-        self.scorer = ""
+        self.scorer = "sleap"
 
         with h5py.File(self.analysis_file, "r") as hf:
             self.tracks = hf["tracks"][:].T
@@ -509,24 +508,34 @@ class SleapTadpole(Tadpole):
         clip.close()
 
 
-class DeeplabcutTadpole(Tadpole):
-    def __init__(self, video_fn, bodyparts_cmap, scorer, **kwargs):
-        super().__init__(video_fn, bodyparts_cmap)
-        self.scorer = scorer
+class DeeplabcutTadpole(SleapTadpole):
+    def __init__(self, video_fn, bodyparts_cmap):
+        Tadpole.__init__(self, video_fn, bodyparts_cmap)
 
-    @property
-    # @lru_cache()
-    def locations(self):
-        return pd.read_hdf(self.analysis_file)[self.scorer]
+        vid_p = Path(video_fn)
+        dlc_h5_fn = str(next((vid_p.parent).glob(f"{vid_p.stem}*.h5")))
 
-    @property
-    # @lru_cache()
-    def bodyparts(self):
-        return self.locations.columns.get_level_values(0).unique().tolist()
+        dlc_tab = pd.read_hdf(dlc_h5_fn)
+        nframes = len(dlc_tab)
 
-    @property
-    def analysis_file(self):
-        return f"{self.vid_path}/{self.vid_fn}{self.scorer}.h5"
+        self.scorer = dlc_tab.columns.get_level_values(0).unique().to_list()[0]
+
+        self.track_names = dlc_tab.columns.get_level_values(1).unique().to_list()
+
+        self._bodyparts = dlc_tab.columns.get_level_values(2).unique().to_list()
+
+        self.tracks = np.zeros(
+            (nframes, len(self._bodyparts), 2, len(self.track_names)), dtype=np.float32
+        )
+
+        for ti, t in enumerate(self.track_names):
+            for bi, b in enumerate(self._bodyparts):
+                x_coords = dlc_tab[self.scorer][t][b]["x"]
+                y_coords = dlc_tab[self.scorer][t][b]["y"]
+                self.tracks[:, bi, 0, ti] = x_coords
+                self.tracks[:, bi, 1, ti] = y_coords
+
+        self.current_track = 0
 
 
 class BatchGrouper:
