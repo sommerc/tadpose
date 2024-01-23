@@ -433,3 +433,17 @@ class VideoProcessorFFMPEG(VideoProcessor):
     def close(self):
         self.mywriter.close()
         self.vid.release()
+
+
+def write_gen_video(fn, gen, total=None):
+    from tqdm.auto import tqdm
+
+    first_frame = next(gen)
+    dest_height, dest_width, *c = first_frame.shape
+    clip = VideoProcessorCV(sname=fn, codec="mp4v", sw=dest_width, sh=dest_height)
+
+    clip.save_frame(first_frame)
+
+    for img in tqdm(gen, total=total):
+        clip.save_frame(img)
+    clip.close()
