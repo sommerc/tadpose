@@ -34,6 +34,12 @@ setup(
         "scikit-image",
         "scipy",
         "pandas",
+        "numpy",
+        "h5py",
+        "opencv-python-headless",
+        "csaps",
+        "roifile",
+        "tifffile"
     ],
 )
 
