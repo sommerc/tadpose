@@ -150,17 +150,28 @@ def fill_missing(Y, kind="linear"):
     return Y
 
 
-def angles_of_vectors(vec1, vec2):
-    """Compute angles of (vectorized) of 2 nx2 vector arrays"""
-    vec1 = (vec1.T / np.linalg.norm(vec1, axis=1)).T
-    vec2 = (vec2.T / np.linalg.norm(vec2, axis=1)).T
+def angles(vec1, vec2):
+    EPS = 0.000000000001
+    vec1 = (vec1.T / (np.linalg.norm(vec1, axis=1) + EPS)).T
+    vec2 = (vec2.T / (np.linalg.norm(vec2, axis=1) + EPS)).T
 
     ortho_vec1 = np.c_[-vec1[:, 1], vec1[:, 0]]
     sign = np.sign(np.sum(ortho_vec1 * vec2, axis=1))
 
     c = np.sum(vec1 * vec2, axis=1)
-    angles = sign * np.arccos(np.clip(c, -1, 1))
+    angles = sign * np.rad2deg(np.arccos(np.clip(c, -1, 1)))
     return angles
+
+
+def directional_change(xy, sigma=None, subsample=2):
+    if sigma is not None:
+        xy_smo = gaussian_filter1d(xy, sigma=sigma, axis=0)
+    else:
+        xy_smo = xy
+
+    xy_smo = xy_smo[::subsample]
+    v = np.diff(xy_smo, axis=0)
+    return angles(v[:-1], v[1:])
 
 
 def cart2pol(xy):
@@ -416,7 +427,7 @@ class VideoProcessorFFMPEG(VideoProcessor):
                 "-vcodec": "libx264",  # use the h.264 codec
                 "-crf": "18",  # set the constant rate factor to 0, which is lossless
                 "-preset": "fast",  # the slower the better compression, in princple, try,
-                "-framerate": str(self.FPS)
+                "-framerate": str(self.FPS),
                 # other options see https://trac.ffmpeg.org/wiki/Encode/H.264
             },
         )

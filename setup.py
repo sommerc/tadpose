@@ -39,7 +39,7 @@ setup(
         "opencv-python-headless",
         "csaps",
         "roifile",
-        "tifffile"
+        "tifffile",
     ],
 )
 
