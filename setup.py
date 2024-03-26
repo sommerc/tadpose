@@ -32,6 +32,7 @@ setup(
         "matplotlib",
         "tqdm",
         "scikit-image",
+        "scikit-learn",
         "scipy",
         "pandas",
         "numpy",
@@ -40,6 +41,8 @@ setup(
         "csaps",
         "roifile",
         "tifffile",
+        "ipywidgets",
+        "PyYAML"
     ],
 )
 
