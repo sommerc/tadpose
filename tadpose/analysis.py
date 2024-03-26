@@ -7,7 +7,7 @@ from skimage import measure
 from scipy import interpolate
 from scipy.ndimage import gaussian_filter1d
 
-from .utils import angles_of_vectors, smooth_diff, smooth
+from .utils import angles as angles_utils, smooth_diff, smooth
 
 
 def ego_speeds(tadpole, parts=None):
@@ -81,7 +81,7 @@ def angles(tad, part_tuple1, part_tuple2, win=None, track_idx=0, frames=None):
     vec1 = np.diff(parts1, axis=1).squeeze()
     vec2 = np.diff(parts2, axis=1).squeeze()
 
-    return angles_of_vectors(vec1, vec2)
+    return angles_utils(vec1, vec2)
 
 
 def episodes_iter(criteria, min_len=0, max_len=np.Inf):
