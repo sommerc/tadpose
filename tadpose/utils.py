@@ -150,7 +150,7 @@ def fill_missing(Y, kind="linear"):
     return Y
 
 
-def angles(vec1, vec2):
+def angles(vec1, vec2, in_degree=True):
     EPS = 0.000000000001
     vec1 = (vec1.T / (np.linalg.norm(vec1, axis=1) + EPS)).T
     vec2 = (vec2.T / (np.linalg.norm(vec2, axis=1) + EPS)).T
@@ -159,8 +159,12 @@ def angles(vec1, vec2):
     sign = np.sign(np.sum(ortho_vec1 * vec2, axis=1))
 
     c = np.sum(vec1 * vec2, axis=1)
-    angles = sign * np.rad2deg(np.arccos(np.clip(c, -1, 1)))
-    return angles
+    angles = np.arccos(np.clip(c, -1, 1))
+
+    if in_degree:
+        angles = np.rad2deg(angles)
+
+    return angles * sign
 
 
 def directional_change(xy, sigma=None, subsample=2):
