@@ -84,7 +84,7 @@ def angles(tad, part_tuple1, part_tuple2, win=None, track_idx=0, frames=None):
     return angles_utils(vec1, vec2)
 
 
-def episodes_iter(criteria, min_len=0, max_len=np.Inf):
+def episodes_iter(criteria, min_len=0, max_len=np.inf):
     label_t = measure.label(criteria)[:, None]
     for rp in measure.regionprops(label_t):
         start = rp.slice[0].start
