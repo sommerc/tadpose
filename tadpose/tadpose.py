@@ -151,21 +151,29 @@ class SleapTadpole(Tadpole):
             )
         return frames
 
-    # @lru_cache()
-    # def __getitem__(self, track_idx):
-    #     assert track_idx < len(self), "track does not exist, go away"
-    #     tracks = self.tracks[..., track_idx]
-    #     liklihoods = 1.0 - np.isnan(self.tracks[:, :, 0, track_idx])
+    
+    def locs_table(self, frames, track_idx=0, fill_missing=False):
+        frames = self._check_frames(frames)
 
-    #     coords = ["x", "y", "likelihood"]
+        locs = self.locs(fill_missing=fill_missing, track_idx=track_idx)[frames]
+        coords = ["x", "y"]
 
-    #     liklihoods = liklihoods[..., None]
+        df = pd.DataFrame(locs.reshape(len(locs), -1))
+        df.columns = pd.MultiIndex.from_product([self.bodyparts, coords])
 
-    #     tracks = np.concatenate([tracks, liklihoods], axis=2)
-    #     df = pd.DataFrame(tracks.reshape(len(tracks), -1))
-    #     df.columns = pd.MultiIndex.from_product([self.bodyparts, coords])
+        return df
+    
+    def ego_table(self, frames, track_idx=0, fill_missing=False):
+        frames = self._check_frames(frames)
 
-    #     return df
+        locs = self.ego_locs(fill_missing=fill_missing, track_idx=track_idx)[frames]
+        coords = ["x", "y"]
+
+        df = pd.DataFrame(locs.reshape(len(locs), -1))
+        df.columns = pd.MultiIndex.from_product([[f"{bp}_aligned" for bp in self.bodyparts], coords])
+
+        return df
+
 
     def locs(self, track_idx=0, parts=None, fill_missing=True):
         tracks = self.tracks[..., track_idx]
