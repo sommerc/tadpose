@@ -25,3 +25,10 @@ pip install git+https://github.com/sommerc/tadpose.git
 
 This requires `git` to be installed.
 
+## Examples
+
+Download a SLEAP predicted [demo movie](https://seafile.ist.ac.at/f/a753c77b4243452d8b0c/?dl=1) and unzip.
+
+And follow steps in [example notebook](notebooks/example.ipynb)
+
+
