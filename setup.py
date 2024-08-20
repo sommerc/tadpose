@@ -14,10 +14,10 @@ setup(
     name="tadpose",
     packages=find_packages(),
     version=__version__,
-    description="TadPose: DLC based tadpole analyzer",
+    description="TadPose: post-SLEAP analysis",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://git.ist.ac.at/csommer/tadpose",
+    url="https://github.com/sommerc/tadpose",
     license="BSD",
     classifiers=[
         "Development Status :: 4 - Beta",
