@@ -149,7 +149,6 @@ class SleapTadpole(Tadpole):
             )
         return frames
 
-    
     def locs_table(self, frames, track_idx=0, fill_missing=False):
         frames = self._check_frames(frames)
 
@@ -160,7 +159,7 @@ class SleapTadpole(Tadpole):
         df.columns = pd.MultiIndex.from_product([self.bodyparts, coords])
 
         return df
-    
+
     def ego_table(self, frames, track_idx=0, fill_missing=False):
         frames = self._check_frames(frames)
 
@@ -168,10 +167,11 @@ class SleapTadpole(Tadpole):
         coords = ["x", "y"]
 
         df = pd.DataFrame(locs.reshape(len(locs), -1))
-        df.columns = pd.MultiIndex.from_product([[f"{bp}_aligned" for bp in self.bodyparts], coords])
+        df.columns = pd.MultiIndex.from_product(
+            [[f"{bp}_aligned" for bp in self.bodyparts], coords]
+        )
 
         return df
-
 
     def locs(self, track_idx=0, parts=None, fill_missing=True):
         tracks = self.tracks[..., track_idx]
@@ -508,7 +508,7 @@ class SleapTadpole(Tadpole):
 
         for img in tqdm(
             self.ego_image_gen(frames, track_idx, dest_height, dest_width),
-            total=frames[1] - frames[0],
+            total=len(frames),
         ):
             clip.save_frame(np.rot90(img, k=2))
         clip.close()
