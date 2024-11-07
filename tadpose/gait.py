@@ -16,24 +16,26 @@ from skimage import measure as skm
 
 class Stride:
     def __init__(
-        self, mouse, paw_part, min_peak_prominence, sigma=0, calibration_factor=1
+        self,
+        mouse,
+        paw_part,
+        min_peak_prominence_px,
+        sigma=0,
     ):
         self.mouse = mouse
         self.paw_part = paw_part
-        self.min_peak_prominence = min_peak_prominence
+        self.min_peak_prominence = min_peak_prominence_px
         self.sigma = sigma
-        self.calibration_factor = calibration_factor
 
         self._stride_frames = None
         self.paw_signal = None
         self._valid_strides_bind = None
 
-    def init_strides(self):
+    def find_strides(self):
 
-        self.paw_signal = (
-            self.mouse.ego_locs(parts=(self.paw_part,), fill_missing=True)[:, 0, 1]
-            * self.calibration_factor
-        )
+        self.paw_signal = self.mouse.ego_locs(
+            parts=(self.paw_part,), fill_missing=True
+        )[:, 0, 1]
 
         if self.sigma > 0:
             self.paw_signal = ndi.gaussian_filter1d(self.paw_signal, sigma=self.sigma)
@@ -103,6 +105,7 @@ class Stride:
             ax.add_patch(rect_swing)
 
         ax.set_xlim(slc.start, slc.stop)
+        ax.set_ylabel(f"Aligned\n{self.paw_part}")
 
     def validate_strides(self, other):
         bins = np.r_[self._stride_frames[:, 0], self._stride_frames[-1, 2]]
@@ -325,7 +328,7 @@ class StrideProperties:
 
             if stride_ix == debug_plot:
 
-                f, (ax, axl) = plt.subplots(1, 2, figsize=(16, 5))
+                f, ax = plt.subplots()
                 ax.imshow(self.mouse.image(stance_start), "Reds", alpha=0.5)
                 ax.imshow(self.mouse.image(stride_end), "Greens", alpha=0.5)
                 ax.plot((p1[0], p2[0]), (p1[1], p2[1]), "g-o")
@@ -336,10 +339,16 @@ class StrideProperties:
                         color = "c"
                     ax.plot((p[0], p_proj[0]), (p[1], p_proj[1]), f"{color}-+")
                 ax.set_aspect(1.0)
-                ax.set_xlim(p2[0] - 256, p2[0] + 256)
-                ax.set_ylim(p2[1] - 256, p2[1] + 256)
+                ax.set_xlim(
+                    p2[0] - 256,
+                    p2[0] + 256,
+                )
+                ax.set_ylim(
+                    p2[1] + 256,
+                    p2[1] - 256,
+                )
 
-                axl.plot(range(stance_start, stride_end), displacements[stride_ix])
+                # axl.plot(range(stance_start, stride_end), displacements[stride_ix])
 
         return displacements
 
