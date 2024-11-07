@@ -7,7 +7,7 @@ from skimage import measure
 from scipy import interpolate
 from scipy.ndimage import gaussian_filter1d
 
-from .utils import angles as angles_utils, smooth_diff, smooth
+from .utils import angles as angles_utils, angles_old, smooth_diff, smooth
 
 
 def ego_speeds(tadpole, parts=None):
@@ -36,31 +36,8 @@ def speeds(tadpole, parts=None):
     return pd.DataFrame(speeds, columns=parts)
 
 
-# OLD: ego locs acutally not needed here
-# def angles(tad, part_tuple1, part_tuple2, win=None, track_idx=0, frames=None):
-#     frames = tad._check_frames(frames)
-#     elocs = tad.ego_locs(track_idx=track_idx)[frames].copy()
-
-#     elocs[..., 0] *= -1
-
-#     parts1_idx = [tad.bodyparts.index(p) for p in part_tuple1]
-#     parts2_idx = [tad.bodyparts.index(p) for p in part_tuple2]
-
-#     parts1 = elocs[:, parts1_idx, :]
-#     parts2 = elocs[:, parts2_idx, :]
-
-#     if win is not None:
-#         for p in range(parts1.shape[1]):
-#             parts1[:, p, :] = smooth(parts1[:, p, :], win=win)
-#             parts2[:, p, :] = smooth(parts2[:, p, :], win=win)
-
-#     vec1 = np.diff(parts1, axis=1).squeeze()
-#     vec2 = np.diff(parts2, axis=1).squeeze()
-
-#     return angles_of_vectors(vec1, vec2)
-
-
-def angles(tad, part_tuple1, part_tuple2, win=None, track_idx=0, frames=None):
+### Got rid of *= -1 by negating angle later on
+def angles_depr(tad, part_tuple1, part_tuple2, win=None, track_idx=0, frames=None):
     frames = tad._check_frames(frames)
     elocs = tad.locs(track_idx=track_idx)[frames].copy()
 
@@ -81,7 +58,55 @@ def angles(tad, part_tuple1, part_tuple2, win=None, track_idx=0, frames=None):
     vec1 = np.diff(parts1, axis=1).squeeze()
     vec2 = np.diff(parts2, axis=1).squeeze()
 
+    return angles_old(vec1, vec2)
+
+
+def angles(tad, part_tuple1, part_tuple2=None, track_idx=0, frames=None):
+    frames = tad._check_frames(frames)
+    locs = tad.locs(track_idx=track_idx)[frames]
+
+    parts1_idx = [tad.bodyparts.index(p) for p in part_tuple1]
+    parts1 = locs[:, parts1_idx, :]
+    vec1 = np.diff(parts1, axis=1).squeeze()
+
+    if part_tuple2 is not None:
+        parts2_idx = [tad.bodyparts.index(p) for p in part_tuple2]
+        parts2 = locs[:, parts2_idx, :]
+        vec2 = np.diff(parts2, axis=1).squeeze()
+    else:
+        vec2 = np.zeros_like(vec1)
+        vec2[:, 1] = 1
+
     return angles_utils(vec1, vec2)
+
+
+def angles_diff(tad, part_tuple1, track_idx=0, frames=None):
+    frames = tad._check_frames(frames)
+    locs = tad.locs(track_idx=track_idx)[frames]
+
+    parts1_idx = [tad.bodyparts.index(p) for p in part_tuple1]
+
+    parts1 = locs[:, parts1_idx, :]
+
+    vec1 = np.diff(parts1, axis=1).squeeze()
+
+    return angles_utils(vec1[:-1], vec1[1:])
+
+
+# Same as anlges diff
+def angular_velocity(tad, part1, part2, track_idx=0, frames=None, in_degree=True):
+    frames = tad._check_frames(frames)
+    locs = tad.locs(track_idx=track_idx)[frames]
+
+    part1_idx = tad.bodyparts.index(part1)
+    part2_idx = tad.bodyparts.index(part2)
+
+    part1 = locs[:, part1_idx, :]
+    part2 = locs[:, part2_idx, :]
+
+    vec1 = part1 - part2
+
+    return angles_utils(vec1[:-1], vec1[1:], in_degree=in_degree)
 
 
 def episodes_iter(criteria, min_len=0, max_len=np.inf):
