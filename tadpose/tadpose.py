@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 
-from tqdm.auto import tqdm, trange
+from tqdm.auto import tqdm
 
 from . import utils, analysis
 
@@ -131,7 +131,7 @@ class SleapTadpole(Tadpole):
     def nframes(self):
         return len(self.tracks)
 
-    def _check_frames(self, frames):
+    def check_frames(self, frames):
         if frames is None:
             frames = range(self.nframes)
         elif isinstance(frames, range):
@@ -150,7 +150,7 @@ class SleapTadpole(Tadpole):
         return frames
 
     def locs_table(self, frames, track_idx=0, fill_missing=False):
-        frames = self._check_frames(frames)
+        frames = self.check_frames(frames)
 
         locs = self.locs(fill_missing=fill_missing, track_idx=track_idx)[frames]
         coords = ["x", "y"]
@@ -161,7 +161,7 @@ class SleapTadpole(Tadpole):
         return df
 
     def ego_table(self, frames, track_idx=0, fill_missing=False):
-        frames = self._check_frames(frames)
+        frames = self.check_frames(frames)
 
         locs = self.ego_locs(fill_missing=fill_missing, track_idx=track_idx)[frames]
         coords = ["x", "y"]
@@ -207,6 +207,14 @@ class SleapTadpole(Tadpole):
 
         return sbb_coords
 
+    @property
+    def video_fps(self):
+        fps = None
+        if not self._vid_handle:
+            self._vid_handle = cv2.VideoCapture(self.video_fn)
+        fps = self._vid_handle.get(cv2.CAP_PROP_FPS)
+        return fps
+
     def ego_image(self, frame, track_idx=0, dest_height=100, dest_width=100, **kwargs):
         if isinstance(frame, int):
             frames = range(frame, frame + 1)
@@ -243,18 +251,14 @@ class SleapTadpole(Tadpole):
         return out_img.squeeze()
 
     def ego_plot(
-        self, frame, parts, track_idx=0, dest_height=320, dest_width=160, ax=None
+        self, frame, parts=None, track_idx=0, dest_height=320, dest_width=160, ax=None
     ):
         ego_img = self.ego_image(
             frame=frame,
-            parts=parts,
             track_idx=track_idx,
             dest_height=dest_height,
             dest_width=dest_width,
         )
-        ego_locs = self.ego_locs(
-            track_idx=track_idx, parts=tuple(parts), fill_missing=False
-        )[frame]
 
         if ax is None:
             _, ax = matplotlib.pyplot.subplots()
@@ -264,11 +268,15 @@ class SleapTadpole(Tadpole):
             origin="lower",
             extent=[-dest_width / 2, dest_width / 2, -dest_height / 2, dest_height / 2],
         )
-        ax.plot(*ego_locs.T, ".-")
+        if parts is not None:
+            ego_locs = self.ego_locs(
+                track_idx=track_idx, parts=tuple(parts), fill_missing=False
+            )[frame]
+            ax.plot(*ego_locs.T, ".-")
         return ax
 
     def ego_image_gen(self, frames=None, track_idx=0, dest_height=100, dest_width=100):
-        frames = self._check_frames(frames)
+        frames = self.check_frames(frames)
 
         _vid_handle = cv2.VideoCapture(self.video_fn)
 
@@ -285,11 +293,14 @@ class SleapTadpole(Tadpole):
                 # in_img = np.flipud(in_img)
                 in_img = np.fliplr(in_img)
 
-            yield self.aligner.warp_image(
-                in_img,
-                trans,
-                dest_height,
-                dest_width,
+            yield (
+                frame,
+                self.aligner.warp_image(
+                    in_img,
+                    trans,
+                    dest_height,
+                    dest_width,
+                ),
             )
 
         _vid_handle.release()
@@ -297,7 +308,7 @@ class SleapTadpole(Tadpole):
     def bbox_image_gen(
         self, center_part, frames=None, track_idx=0, dest_height=100, dest_width=100
     ):
-        frames = self._check_frames(frames)
+        frames = self.check_frames(frames)
 
         _vid_handle = cv2.VideoCapture(self.video_fn)
 
@@ -336,7 +347,7 @@ class SleapTadpole(Tadpole):
             bbox_img = in_img[ya:yb, xa:xb]
 
             if bbox_img.shape[:2] == (dest_height, dest_width):
-                yield bbox_img
+                yield frame, bbox_img
             else:
                 bbox_img_pad = np.zeros(
                     (dest_height, dest_width) + in_img.shape[2:], dtype=in_img.dtype
@@ -345,7 +356,7 @@ class SleapTadpole(Tadpole):
                     max(0, h2 - y) : max(0, h2 - y) + bbox_img.shape[0],
                     max(0, w2 - x) : max(0, w2 - x) + bbox_img.shape[1],
                 ] = bbox_img
-                yield bbox_img_pad
+                yield frame, bbox_img_pad
 
         _vid_handle.release()
 
@@ -369,7 +380,7 @@ class SleapTadpole(Tadpole):
         from IPython.display import Image, display
 
         with imageio.get_writer(".temp.gif", mode="I") as writer:
-            for image in self.ego_image_gen(
+            for _, image in self.ego_image_gen(
                 frames,
                 dest_width=dest_width,
                 dest_height=dest_height,
@@ -381,7 +392,7 @@ class SleapTadpole(Tadpole):
             display(Image(file.read(), format="png"))
 
     def speed(self, part, frames=None, track_idx=0, pre_sigma=0, sigma=0):
-        frames = self._check_frames(frames)
+        frames = self.check_frames(frames)
 
         part_loc = self.locs(parts=(part,), track_idx=track_idx).squeeze()[frames]
 
@@ -398,7 +409,7 @@ class SleapTadpole(Tadpole):
         return speed
 
     def acceleration(self, part, frames=None, track_idx=0, sigma=0):
-        frames = self._check_frames(frames)
+        frames = self.check_frames(frames)
 
         part_loc = self.locs(parts=(part,), track_idx=track_idx).squeeze()[frames]
         part_disp = np.gradient(part_loc, axis=0)
@@ -423,7 +434,7 @@ class SleapTadpole(Tadpole):
     def spline_curvature(
         self, parts, frames=None, track_idx=0, n_interpolants=64, spline_smooth=1
     ):
-        frames = self._check_frames(frames)
+        frames = self.check_frames(frames)
 
         parts_positions = self.ego_locs(parts=tuple(parts), track_idx=track_idx)[frames]
 
@@ -436,7 +447,7 @@ class SleapTadpole(Tadpole):
     def spline_interpolate(
         self, parts, frames=None, track_idx=0, n_interpolants=64, spline_smooth=1
     ):
-        frames = self._check_frames(frames)
+        frames = self.check_frames(frames)
 
         parts_positions = self.ego_locs(parts=tuple(parts), track_idx=track_idx)[frames]
 
@@ -447,7 +458,7 @@ class SleapTadpole(Tadpole):
         return np.stack(list(map(get_curvature, parts_positions)))
 
     def parts_detected(self, parts=None, frames=None, track_idx=0):
-        frames = self._check_frames(frames)
+        frames = self.check_frames(frames)
 
         if parts is None:
             parts = self.bodyparts
@@ -495,7 +506,7 @@ class SleapTadpole(Tadpole):
     ):
         from .utils import VideoProcessorCV as vp
 
-        frames = self._check_frames(frames)
+        frames = self.check_frames(frames)
 
         if out_fn is None:
             out_mov = f"{self.vid_path}/{self.vid_fn}_{track_idx:02}_{suffix}.mp4"
@@ -506,12 +517,31 @@ class SleapTadpole(Tadpole):
         dest_height, dest_width = shape
         clip = vp(sname=out_mov, codec="mp4v", sw=dest_width, sh=dest_height)
 
-        for img in tqdm(
+        for _, img in tqdm(
             self.ego_image_gen(frames, track_idx, dest_height, dest_width),
             total=len(frames),
         ):
             clip.save_frame(np.rot90(img, k=2))
         clip.close()
+
+    def social_receptive_field(
+        self,
+        focal_track_idx=0,
+        srf_bins=None,
+        srf_size=None,
+        other_part=None,
+    ):
+        if len(self) == 1:
+            raise RuntimeError("SRF analysis requires at least 2 animals.")
+        if self.aligner is None:
+            raise RuntimeError(
+                "SRF analysis requires an aligner. Please set the aligner first."
+            )
+        from tadpose.analysis import SocialReceptiveField
+
+        return SocialReceptiveField(
+            self, focal_track_idx, srf_bins, srf_size, other_part
+        )
 
 
 class DeeplabcutTadpole(SleapTadpole):

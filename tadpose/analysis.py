@@ -5,7 +5,7 @@ import pandas as pd
 
 from skimage import measure
 from scipy import interpolate
-from scipy.ndimage import gaussian_filter1d
+from scipy.ndimage import gaussian_filter1d, gaussian_filter
 
 from .utils import angles as angles_utils, angles_old, smooth_diff, smooth
 
@@ -23,11 +23,13 @@ def ego_speeds(tadpole, parts=None):
     return pd.DataFrame(speeds)
 
 
-def speeds(tadpole, parts=None):
+def speeds(tadpole, parts=None, track_idx=0, fill_missing=False):
     if parts is None:
         parts = tadpole.bodyparts
 
-    locs = tadpole.locs(parts=tuple(parts))
+    locs = tadpole.locs(
+        parts=tuple(parts), track_idx=track_idx, fill_missing=fill_missing
+    )
 
     speeds = {}
     for pi, p in enumerate(parts):
@@ -196,3 +198,148 @@ class ReparametrizedCSAPSSplineFit:
 
     def interpolate(self):
         return self.spline(self.arclen).T
+
+
+class SocialReceptiveField:
+    def __init__(
+        self,
+        tad,
+        focal_track_idx,
+        srf_bins=None,
+        srf_size=None,
+        other_part=None,
+    ):
+        """
+        Social Receptive Field (SRF) of a focal animal.
+        The SRF is the receptive field of a focal animal, which is defined as the
+        spatial distribution of the other animal's body part locations in the
+        focal animal's egocentric coordinate system. The center of the resulting
+        heatmap is the focal animal's centrlly aligned body part location.
+
+        Parameters
+        ----------
+        tad : tadpose.Tadpole
+            The Tadpole object containing the pose estimation data.
+        focal_track_idx : int
+            The index of the focal animal's track.
+        srf_bins : tuple of int, optional
+            The number of bins in the x and y dimensions for the SRF heatmap.
+            If None, defaults to (srf_size[0] // 16, srf_size[1] // 16).
+        srf_size : tuple of int, optional
+            The size of the SRF heatmap x, and y (in pixels). If None, defaults to the
+            shape of the image in the Tadpole object.
+        other_part : str, optional
+            The name of the body part of the other animal to compute the SRF for.
+            If None, defaults to the alinged part of the focal mouce.
+
+        Methods
+        -------
+        compute(frames=None)
+            Computes the SRF heatmap for the specified frames as [start, end].
+            If frames is None, computes the SRF for all frames in the Tadpole object.
+
+        plot(frame=0, heatmap_sigma=0)
+            Plots the SRF heatmap and an example image of the focal animal at the
+            specified frame. The heatmap is smoothed using a Gaussian filter with
+            the specified sigma value. The focal animal's
+        """
+
+        self.tad = tad
+        self.focal_track_idx = focal_track_idx
+
+        self.other_part = other_part
+
+        self.central_part, self.up_part = self.tad.aligner.bodyparts_to_align
+
+        if other_part is None:
+            self.other_part = self.up_part
+        else:
+            self.other_part = other_part
+
+        self.other_track_ids = set(range(len(self.tad)))
+        self.other_track_ids.remove(self.focal_track_idx)
+
+        if srf_size is None:
+            self.srf_size = self.tad.image(0).shape[::1]
+        else:
+            self.srf_size = srf_size
+
+        if srf_bins is None:
+            self.srf_bins = (self.srf_size[0] // 16, self.srf_size[1] // 16)
+        else:
+            self.srf_bins = srf_bins
+
+        self.rotation_matrices = np.stack(
+            self.tad.aligner.transformations[self.focal_track_idx]
+        )
+
+    def compute(self, frames=None):
+        frames = self.tad.check_frames(frames)
+        print(frames)
+
+        result_heatmaps = []
+        for other_tid in self.other_track_ids:
+            other_locs = self.tad.locs(
+                parts=(self.other_part,), track_idx=other_tid
+            ).squeeze()
+
+            vecs = np.c_[other_locs, np.ones(other_locs.shape[0])]
+            vecs_ego_centric = np.einsum("fij,fj->fi", self.rotation_matrices, vecs)[
+                :, :2
+            ][frames]
+
+            print(vecs_ego_centric)
+
+            srf_heatmap_T, self.x_edges, self.y_edges = np.histogram2d(
+                *vecs_ego_centric.T,
+                bins=self.srf_bins,
+                range=[
+                    [-self.srf_size[0] // 2, self.srf_size[0] // 2],
+                    [-self.srf_size[1] // 2, self.srf_size[1] // 2],
+                ],
+            )
+
+            result_heatmaps.append(srf_heatmap_T.T)
+
+        self.srf_heatmaps = np.stack(result_heatmaps)
+        return self.srf_heatmaps, self.y_edges, self.x_edges
+
+    def plot(self, frame=0, heatmap_sigma=0):
+        from matplotlib import pyplot as plt
+
+        f, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5), sharex=True, sharey=True)
+
+        up_part_pos = self.tad.ego_locs(track_idx=0, parts=(self.up_part,))[frame, 0]
+
+        ax1 = self.tad.ego_plot(
+            frame,
+            parts=None,
+            track_idx=self.focal_track_idx,
+            ax=ax1,
+            dest_height=self.srf_size[1],
+            dest_width=self.srf_size[0],
+        )
+        ax1.arrow(0, 0, *up_part_pos, color="red", width=2, head_width=5)
+        ax1.set_title(f"Focal animal with body axis")
+
+        # sef_masked = np.ma.masked_where(self.srf_heatmap == 0, self.srf_heatmap)
+
+        heatmap = self.srf_heatmaps.mean(0)
+        if heatmap_sigma > 0:
+            heatmap = gaussian_filter(heatmap, sigma=heatmap_sigma)
+
+        ax2.imshow(
+            heatmap,
+            origin="lower",
+            extent=[
+                -self.srf_size[0] // 2,
+                self.srf_size[0] // 2,
+                -self.srf_size[1] // 2,
+                self.srf_size[1] // 2,
+            ],
+            aspect="equal",
+            cmap="viridis",
+        )
+        up_part_pos = self.tad.ego_locs(track_idx=0, parts=(self.up_part,))[frame, 0]
+        ax2.arrow(0, 0, *up_part_pos, color="red", width=2, head_width=5)
+        ax2.set_title(f"SRF heatmap of other's mouse {self.other_part}")

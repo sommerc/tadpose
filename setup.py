@@ -13,7 +13,7 @@ exec((_this_dir / "tadpose" / "version.py").read_text())
 setup(
     name="tadpose",
     packages=find_packages(),
-    version=__version__,
+    version=__version__,  # noqa: F821
     description="TadPose: post-SLEAP analysis",
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -42,7 +42,6 @@ setup(
         "roifile",
         "tifffile",
         "ipywidgets",
-        "PyYAML"
+        "PyYAML",
     ],
 )
-

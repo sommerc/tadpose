@@ -32,7 +32,6 @@ class Stride:
         self._valid_strides_bind = None
 
     def find_strides(self):
-
         self.paw_signal = self.mouse.ego_locs(
             parts=(self.paw_part,), fill_missing=True
         )[:, 0, 1]
@@ -50,9 +49,9 @@ class Stride:
         if minima[-1] < maxima[-1]:
             maxima = maxima[:-1]
 
-        assert len(maxima) == len(
-            minima
-        ), f"maxima vs minima len {len(maxima)} != {len(minima)}"
+        assert len(maxima) == len(minima), (
+            f"maxima vs minima len {len(maxima)} != {len(minima)}"
+        )
 
         self._stride_frames = np.zeros((len(maxima), 3), dtype=np.uint32)
         self._stride_frames[:, 0] = maxima  # stance start
@@ -83,6 +82,7 @@ class Stride:
         )
 
         # plot stance
+        first_time = True
         for stance_start, swing_start, stride_stop in self.stride_frames:
             if stance_start < slc.start or stride_stop > slc.stop:
                 continue
@@ -92,6 +92,7 @@ class Stride:
                 sig_height,
                 color=color_stance,
                 alpha=alpha_stance,
+                label="Stance" if first_time else None,
             )
             ax.add_patch(rect_stance)
 
@@ -101,8 +102,11 @@ class Stride:
                 sig_height,
                 color=color_swing,
                 alpha=alpha_swing,
+                label="Swing" if first_time else None,
             )
             ax.add_patch(rect_swing)
+
+            first_time = False
 
         ax.set_xlim(slc.start, slc.stop)
         ax.set_ylabel(f"Aligned\n{self.paw_part}")
@@ -120,9 +124,6 @@ class Stride:
     @property
     def stride_frames(self):
         if self._valid_strides_bind is None:
-            print(
-                f"WARNING: Strides from '{self.paw_part}' are not validated yet by symmetric paw strides. Using all strides..."
-            )
             strides_bind = np.ones(len(self._stride_frames), dtype=bool)
         else:
             strides_bind = self._valid_strides_bind
@@ -138,7 +139,6 @@ class Stride:
         a = self.stride_frames[:, 0] > start
         b = self.stride_frames[:, 2] < stop
         for stance_start, swing_start, stride_stop in self.stride_frames[a & b]:
-
             yield stance_start, swing_start, stride_stop
 
     def strides_in_label(self, mask, min_duration):
@@ -153,9 +153,25 @@ class Stride:
 
         return self.stride_frames[in_label_strides == 1]
 
+    def strides_in_label_slice_iter(self, mask, min_duration):
+        for rp in skm.regionprops(skm.label(mask)[:, None]):
+            if rp.area > min_duration:
+                yield rp.slice[0]
+
+    def stride_idx_of_frame(self, frame):
+        sidx = np.nonzero(
+            np.logical_and(
+                self.stride_frames[:, 0] <= frame,
+                self.stride_frames[:, 2] > frame,
+            )
+        )[0]
+
+        if len(sidx) == 0:
+            return -1
+        return sidx[0]
+
 
 def project_point_on_line(line_p1, line_p2, pnt):
-
     # distance between p1 and p2
     line_dist = np.sum((line_p1 - line_p2) ** 2)
     if line_dist == 0:
@@ -182,13 +198,13 @@ def project_point_on_line(line_p1, line_p2, pnt):
 
 
 class StrideProperties:
-    def __init__(self, mouse, mask, pixel_size, fps, min_duration=30):
+    def __init__(self, mouse, mask, pixel_size, fps, min_duration_sec):
         self.mouse = mouse
         self.mask = mask
 
         self.pixel_size = pixel_size
         self.fps = fps
-        self.min_duration = min_duration
+        self.min_duration = min_duration_sec * fps
 
     def angular_velocity(self, strides, part_axis):
         av_seq = angular_velocity(self.mouse, part_axis[0], part_axis[1]) * self.fps
@@ -199,6 +215,26 @@ class StrideProperties:
             self.mask, self.min_duration
         ):
             res.append(av_seq[stance_start:stride_stop].mean())
+
+        return np.array(res)
+
+    def distance(self, strides, part_a, part_b):
+        locs = self.mouse.locs(parts=(part_a, part_b)).squeeze()
+
+        res = []
+
+        for stance_start, swing_start, stride_stop in strides.strides_in_label(
+            self.mask, self.min_duration
+        ):
+            dist = (
+                np.linalg.norm(
+                    locs[stance_start:stride_stop, 0]
+                    - locs[stance_start:stride_stop, 1],
+                    axis=1,
+                ).mean()
+                * self.pixel_size
+            )
+            res.append(dist)
 
         return np.array(res)
 
@@ -285,10 +321,20 @@ class StrideProperties:
                     f, ax = plt.subplots()
                     ax.imshow(self.mouse.image(stride_mapped_r[0]), "Reds", alpha=0.5)
                     ax.imshow(self.mouse.image(stride_mapped_r[2]), "Greens", alpha=0.5)
-                    ax.plot((p1[0], p2[0]), (p1[1], p2[1]), "g-o")
-                    ax.plot(*p2, "ro")
-                    ax.plot((p_opp[0], p_opp_proj[0]), (p_opp[1], p_opp_proj[1]), "b-+")
+                    ax.plot((p1[0], p2[0]), (p1[1], p2[1]), "g-", label="Stride length")
+                    ax.plot(*p1, "g.", label="Stride Start")
+                    ax.plot(*p2, "r.", label="Stride End")
+                    ax.plot(
+                        (p_opp[0], p_opp_proj[0]),
+                        (p_opp[1], p_opp_proj[1]),
+                        "b-",
+                        label="Step width",
+                    )
                     ax.set_aspect(1.0)
+                    ax.set_xlim(p2[0] - 180, p2[0] + 180)
+                    ax.set_ylim(p2[1] + 180, p2[1] - 180)
+
+                    ax.legend()
 
                 cnt += 1
 
@@ -309,11 +355,10 @@ class StrideProperties:
         for stride_ix, (stance_start, swing_start, stride_end) in enumerate(
             strides_frames
         ):
-
             p1 = part_to_proj_on_locs[stance_start]
-            p2 = part_to_proj_on_locs[stride_end]
+            p2 = part_to_proj_on_locs[stride_end + 1]
 
-            ps = [parts_locs[pt] for pt in range(stance_start, stride_end)]
+            ps = [parts_locs[pt] for pt in range(stance_start, stride_end + 1)]
 
             ps_proj = [project_point_on_line(p1, p2, p) for p in ps]
 
@@ -327,28 +372,57 @@ class StrideProperties:
             )
 
             if stride_ix == debug_plot:
+                fig = plt.figure(figsize=(6, 10)).subplot_mosaic(
+                    mosaic="""
+                            AAAAAA
+                            AAAAAA
+                            AAAAAA
+                            BBBBBB
+                            """,
+                )
+                ax1 = fig["A"]
+                ax2 = fig["B"]
 
-                f, ax = plt.subplots()
-                ax.imshow(self.mouse.image(stance_start), "Reds", alpha=0.5)
-                ax.imshow(self.mouse.image(stride_end), "Greens", alpha=0.5)
-                ax.plot((p1[0], p2[0]), (p1[1], p2[1]), "g-o")
-                ax.plot(*p2, "ro")
+                ax1.imshow(self.mouse.image(stance_start), "Reds", alpha=0.5)
+                ax1.imshow(self.mouse.image(stride_end), "Greens", alpha=0.5)
+                ax1.axline(
+                    p1,
+                    p2,
+                    marker=".",
+                    color="darkblue",
+                    ls="--",
+                    label="Stride Body Axis",
+                )
+                ax1.plot(*p1, "go", label="Center Stride Start")
+                ax1.plot(*p2, "ro", label="Center Stride End")
                 for p, p_proj, p_sign in zip(ps, ps_proj, ps_proj_sign):
                     color = "m"
                     if p_sign < 0:
                         color = "c"
-                    ax.plot((p[0], p_proj[0]), (p[1], p_proj[1]), f"{color}-+")
-                ax.set_aspect(1.0)
-                ax.set_xlim(
-                    p2[0] - 256,
-                    p2[0] + 256,
+                    ax1.plot((p[0], p_proj[0]), (p[1], p_proj[1]), f"{color}")
+                ax1.plot(
+                    *np.array(ps).T, "-", label=f"{part} Trajectory", color="darkred"
                 )
-                ax.set_ylim(
-                    p2[1] + 256,
-                    p2[1] - 256,
+                ax1.set_aspect(1.0)
+                ax1.set_xlim(
+                    p1[0] - 180,
+                    p1[0] + 180,
                 )
+                ax1.set_ylim(
+                    p1[1] + 180,
+                    p1[1] - 180,
+                )
+                ax1.set_axis_off()
+                ax1.legend()
+                y = displacements[stride_ix]
+                x = np.linspace(0, 100, len(y))
+                ax2.plot(x, y, color="darkred")
+                ax2.hlines(0, xmin=0, xmax=100, color="darkblue", ls="--")
+                ax2.set_xlabel("Time (%Stride)")
+                ax2.set_ylabel("Lateral Displacement (px)")
 
                 # axl.plot(range(stance_start, stride_end), displacements[stride_ix])
+                plt.tight_layout()
 
         return displacements
 
