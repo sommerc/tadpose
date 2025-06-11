@@ -15,17 +15,12 @@ from skimage import measure as skm
 
 
 class Stride:
-    def __init__(
-        self,
-        mouse,
-        paw_part,
-        min_peak_prominence_px,
-        sigma=0,
-    ):
+    def __init__(self, mouse, paw_part, min_peak_prominence_px, sigma=0, track_idx=0):
         self.mouse = mouse
         self.paw_part = paw_part
         self.min_peak_prominence = min_peak_prominence_px
         self.sigma = sigma
+        self.track_idx = track_idx
 
         self._stride_frames = None
         self.paw_signal = None
@@ -33,7 +28,7 @@ class Stride:
 
     def find_strides(self):
         self.paw_signal = self.mouse.ego_locs(
-            parts=(self.paw_part,), fill_missing=True
+            parts=(self.paw_part,), fill_missing=True, track_idx=self.track_idx
         )[:, 0, 1]
 
         if self.sigma > 0:
@@ -198,16 +193,22 @@ def project_point_on_line(line_p1, line_p2, pnt):
 
 
 class StrideProperties:
-    def __init__(self, mouse, mask, pixel_size, fps, min_duration_sec):
+    def __init__(self, mouse, mask, pixel_size, fps, min_duration_sec, track_idx):
         self.mouse = mouse
         self.mask = mask
 
         self.pixel_size = pixel_size
         self.fps = fps
         self.min_duration = min_duration_sec * fps
+        self.track_idx = track_idx
 
     def angular_velocity(self, strides, part_axis):
-        av_seq = angular_velocity(self.mouse, part_axis[0], part_axis[1]) * self.fps
+        av_seq = (
+            angular_velocity(
+                self.mouse, part_axis[0], part_axis[1], track_idx=self.track_idx
+            )
+            * self.fps
+        )
 
         res = []
 
@@ -219,7 +220,9 @@ class StrideProperties:
         return np.array(res)
 
     def distance(self, strides, part_a, part_b):
-        locs = self.mouse.locs(parts=(part_a, part_b)).squeeze()
+        locs = self.mouse.locs(
+            parts=(part_a, part_b), track_idx=self.track_idx
+        ).squeeze()
 
         res = []
 
@@ -239,7 +242,9 @@ class StrideProperties:
         return np.array(res)
 
     def stride_length(self, strides):
-        locs = self.mouse.locs(parts=(strides.paw_part,)).squeeze()
+        locs = self.mouse.locs(
+            parts=(strides.paw_part,), track_idx=self.track_idx
+        ).squeeze()
         res = []
 
         for stance_start, swing_start, stride_stop in strides.strides_in_label(
@@ -254,7 +259,9 @@ class StrideProperties:
 
     def stride_speed(self, strides, part_for_speed):
         part_spped = (
-            self.mouse.speed(part=part_for_speed, sigma=0, pre_sigma=0)
+            self.mouse.speed(
+                part=part_for_speed, sigma=0, pre_sigma=0, track_idx=self.track_idx
+            )
             * self.pixel_size
             * self.fps
         )
@@ -286,7 +293,8 @@ class StrideProperties:
             parts=(
                 strides_opposite.paw_part,
                 strides.paw_part,
-            )
+            ),
+            track_idx=self.track_idx,
         )
 
         cnt = 0
@@ -319,8 +327,16 @@ class StrideProperties:
 
                 if cnt == debug_plot:
                     f, ax = plt.subplots()
-                    ax.imshow(self.mouse.image(stride_mapped_r[0]), "Reds", alpha=0.5)
-                    ax.imshow(self.mouse.image(stride_mapped_r[2]), "Greens", alpha=0.5)
+                    ax.imshow(
+                        self.mouse.image(stride_mapped_r[0], track_idx=self.track_idx),
+                        "Reds",
+                        alpha=0.5,
+                    )
+                    ax.imshow(
+                        self.mouse.image(stride_mapped_r[2], track_idx=self.track_idx),
+                        "Greens",
+                        alpha=0.5,
+                    )
                     ax.plot((p1[0], p2[0]), (p1[1], p2[1]), "g-", label="Stride length")
                     ax.plot(*p1, "g.", label="Stride Start")
                     ax.plot(*p2, "r.", label="Stride End")
@@ -347,8 +363,10 @@ class StrideProperties:
         strides_frames = strides.strides_in_label(self.mask, self.min_duration)
 
         # real locs 0 for the stride opposite side, 1 for the side in question
-        part_to_proj_on_locs = self.mouse.locs(parts=(part_to_proj_on,)).squeeze()
-        parts_locs = self.mouse.locs(parts=(part,)).squeeze()
+        part_to_proj_on_locs = self.mouse.locs(
+            parts=(part_to_proj_on,), track_idx=self.track_idx
+        ).squeeze()
+        parts_locs = self.mouse.locs(parts=(part,), track_idx=self.track_idx).squeeze()
 
         displacements = {}
 
@@ -383,8 +401,16 @@ class StrideProperties:
                 ax1 = fig["A"]
                 ax2 = fig["B"]
 
-                ax1.imshow(self.mouse.image(stance_start), "Reds", alpha=0.5)
-                ax1.imshow(self.mouse.image(stride_end), "Greens", alpha=0.5)
+                ax1.imshow(
+                    self.mouse.image(stance_start, track_idx=self.track_idx),
+                    "Reds",
+                    alpha=0.5,
+                )
+                ax1.imshow(
+                    self.mouse.image(stride_end, track_idx=self.track_idx),
+                    "Greens",
+                    alpha=0.5,
+                )
                 ax1.axline(
                     p1,
                     p2,
