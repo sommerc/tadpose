@@ -40,7 +40,7 @@ def speeds(tadpole, parts=None, track_idx=0, fill_missing=False):
 
 ### Got rid of *= -1 by negating angle later on
 def angles_depr(tad, part_tuple1, part_tuple2, win=None, track_idx=0, frames=None):
-    frames = tad._check_frames(frames)
+    frames = tad.check_frames(frames)
     elocs = tad.locs(track_idx=track_idx)[frames].copy()
 
     elocs[..., 0] *= -1
@@ -64,7 +64,7 @@ def angles_depr(tad, part_tuple1, part_tuple2, win=None, track_idx=0, frames=Non
 
 
 def angles(tad, part_tuple1, part_tuple2=None, track_idx=0, frames=None):
-    frames = tad._check_frames(frames)
+    frames = tad.check_frames(frames)
     locs = tad.locs(track_idx=track_idx)[frames]
 
     parts1_idx = [tad.bodyparts.index(p) for p in part_tuple1]
@@ -83,7 +83,7 @@ def angles(tad, part_tuple1, part_tuple2=None, track_idx=0, frames=None):
 
 
 def angles_diff(tad, part_tuple1, track_idx=0, frames=None):
-    frames = tad._check_frames(frames)
+    frames = tad.check_frames(frames)
     locs = tad.locs(track_idx=track_idx)[frames]
 
     parts1_idx = [tad.bodyparts.index(p) for p in part_tuple1]
@@ -97,7 +97,7 @@ def angles_diff(tad, part_tuple1, track_idx=0, frames=None):
 
 # Same as anlges diff
 def angular_velocity(tad, part1, part2, track_idx=0, frames=None, in_degree=True):
-    frames = tad._check_frames(frames)
+    frames = tad.check_frames(frames)
     locs = tad.locs(track_idx=track_idx)[frames]
 
     part1_idx = tad.bodyparts.index(part1)
@@ -265,7 +265,7 @@ class SocialReceptiveField:
             self.srf_size = srf_size
 
         if srf_bins is None:
-            self.srf_bins = (self.srf_size[0] // 16, self.srf_size[1] // 16)
+            self.srf_bins = (self.srf_size[0] // 6, self.srf_size[1] // 6)
         else:
             self.srf_bins = srf_bins
 
@@ -275,7 +275,6 @@ class SocialReceptiveField:
 
     def compute(self, frames=None):
         frames = self.tad.check_frames(frames)
-        print(frames)
 
         result_heatmaps = []
         for other_tid in self.other_track_ids:
@@ -287,8 +286,6 @@ class SocialReceptiveField:
             vecs_ego_centric = np.einsum("fij,fj->fi", self.rotation_matrices, vecs)[
                 :, :2
             ][frames]
-
-            print(vecs_ego_centric)
 
             srf_heatmap_T, self.x_edges, self.y_edges = np.histogram2d(
                 *vecs_ego_centric.T,
