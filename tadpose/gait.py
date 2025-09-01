@@ -328,12 +328,12 @@ class StrideProperties:
                 if cnt == debug_plot:
                     f, ax = plt.subplots()
                     ax.imshow(
-                        self.mouse.image(stride_mapped_r[0], track_idx=self.track_idx),
+                        self.mouse.image(stride_mapped_r[0]),
                         "Reds",
                         alpha=0.5,
                     )
                     ax.imshow(
-                        self.mouse.image(stride_mapped_r[2], track_idx=self.track_idx),
+                        self.mouse.image(stride_mapped_r[2]),
                         "Greens",
                         alpha=0.5,
                     )
@@ -402,12 +402,12 @@ class StrideProperties:
                 ax2 = fig["B"]
 
                 ax1.imshow(
-                    self.mouse.image(stance_start, track_idx=self.track_idx),
+                    self.mouse.image(stance_start),
                     "Reds",
                     alpha=0.5,
                 )
                 ax1.imshow(
-                    self.mouse.image(stride_end, track_idx=self.track_idx),
+                    self.mouse.image(stride_end),
                     "Greens",
                     alpha=0.5,
                 )
