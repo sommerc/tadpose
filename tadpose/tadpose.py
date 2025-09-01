@@ -366,6 +366,8 @@ class SleapTadpole(Tadpole):
 
         self._vid_handle.set(cv2.CAP_PROP_POS_FRAMES, frame)
         _, out_img = self._vid_handle.read()
+
+        ### FIXME
         if "mutant_side" in self.info and self.info["mutant_side"] == "right":
             print("DEBUG: Mutant side 'right' found in info file. Switching to left...")
             out_img = np.fliplr(out_img)
@@ -502,7 +504,13 @@ class SleapTadpole(Tadpole):
         return f"{self.video_fn}.predictions.analysis.h5"
 
     def export_ego_movie(
-        self, frames=None, shape=(224, 244), track_idx=0, suffix="aligned", out_fn=None
+        self,
+        frames=None,
+        shape=(224, 244),
+        track_idx=0,
+        suffix="aligned",
+        out_fn=None,
+        fps=30,
     ):
         from .utils import VideoProcessorCV as vp
 
@@ -515,7 +523,7 @@ class SleapTadpole(Tadpole):
         print(f"Export to: {out_mov}")
 
         dest_height, dest_width = shape
-        clip = vp(sname=out_mov, codec="mp4v", sw=dest_width, sh=dest_height)
+        clip = vp(sname=out_mov, codec="mp4v", sw=dest_width, sh=dest_height, fps=fps)
 
         for _, img in tqdm(
             self.ego_image_gen(frames, track_idx, dest_height, dest_width),
