@@ -13,4 +13,5 @@ tadpose.egg-info/
 *.gif
 *.csv
 *.tab
+*.roi
 assets/*
