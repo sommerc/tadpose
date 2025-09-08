@@ -21,9 +21,9 @@ def calibrate_by_dish(tad, dish_diamter_in_cm):
     matching the dish bottom.
     """
     roi_fn = tad.video_fn[:-4] + ".roi"
-    assert os.path.exists(
-        roi_fn
-    ), ".roi file does not exist. Use Fiji to create a <movie-name>.roi file"
+    assert os.path.exists(roi_fn), (
+        ".roi file does not exist. Use Fiji to create a <movie-name>.roi file"
+    )
     roi = roifile.roiread(roi_fn)
     dish_diam_px = roi.right - roi.left
 
@@ -166,11 +166,11 @@ def angles_old(vec1, vec2, in_degree=True):
 
     return angles * sign
 
-def angles(vec1, vec2,  in_degree=True):
+
+def angles(vec1, vec2, in_degree=True):
     EPS = 1e-9
     v1_u = (vec1.T / (np.linalg.norm(vec1, axis=1) + EPS)).T
     v2_u = (vec2.T / (np.linalg.norm(vec2, axis=1) + EPS)).T
-    
 
     c = np.sum(v1_u * v2_u, axis=1)
     angles = np.arccos(np.clip(c, -1, 1))
@@ -470,12 +470,16 @@ class VideoProcessorFFMPEG(VideoProcessor):
 def write_gen_video(fn, gen, total=None):
     from tqdm.auto import tqdm
 
-    first_frame = next(gen)
+    f0, first_frame = next(gen)
     dest_height, dest_width, *c = first_frame.shape
     clip = VideoProcessorCV(sname=fn, codec="mp4v", sw=dest_width, sh=dest_height)
 
     clip.save_frame(first_frame)
 
-    for img in tqdm(gen, total=total):
-        clip.save_frame(img)
+    if total is None:
+        for _, img in gen:
+            clip.save_frame(img)
+    else:
+        for _, img in tqdm(gen, total=total):
+            clip.save_frame(img)
     clip.close()
