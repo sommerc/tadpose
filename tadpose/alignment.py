@@ -37,7 +37,8 @@ class RotationalAligner:
         Os[:] = self.align_to
 
         # compute angles for all
-        ang = -utils.angles(Ps[:, 1] + Ts, Os, in_degree=False)
+        self.heading_vectors = Ps[:, 1] + Ts
+        ang = -utils.angles(self.heading_vectors, Os, in_degree=False)
 
         # get rotation matrix
         c = np.cos(ang)
