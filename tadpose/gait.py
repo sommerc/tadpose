@@ -167,26 +167,11 @@ class Stride:
 
 
 def project_point_on_line(line_p1, line_p2, pnt):
-    # distance between p1 and p2
     line_dist = np.sum((line_p1 - line_p2) ** 2)
     if line_dist == 0:
         print("project_point_on_line(): line_p1 and line_p2 are the same points")
 
-    # The line extending the segment is parameterized as p1 + t (p2 - p1).
-    # The projection falls where t = [(p3-p1) . (p2-p1)] / |p2-p1|^2
-
-    # if you need the point to project on line extention connecting p1 and p2
     t = np.sum((pnt - line_p1) * (line_p2 - line_p1)) / line_dist
-
-    # if you need to ignore if p3 does not project onto line segment
-    # if t > 1 or t < 0:
-
-    #     print(
-    #         "project_point_on_line(): pnt does not project onto line_p1-line_p2 line segment"
-    #     )
-
-    # if you need the point to project on line segment between p1 and p2 or closest point of the line segment
-    # t = max(0, min(1, np.sum((p3 - p1) * (p2 - p1)) / l2))
 
     pnt_projection = line_p1 + t * (line_p2 - line_p1)
     return pnt_projection
