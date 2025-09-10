@@ -178,13 +178,13 @@ def project_point_on_line(line_p1, line_p2, pnt):
 
 
 class StrideProperties:
-    def __init__(self, mouse, mask, pixel_size, fps, min_duration_sec, track_idx):
+    def __init__(self, mouse, mask, pixel_size, min_duration_sec, track_idx):
         self.mouse = mouse
         self.mask = mask
 
         self.pixel_size = pixel_size
-        self.fps = fps
-        self.min_duration = min_duration_sec * fps
+        self.fps = mouse.video_fps
+        self.min_duration = min_duration_sec * self.fps
         self.track_idx = track_idx
 
     def angular_velocity(self, strides, part_axis):
