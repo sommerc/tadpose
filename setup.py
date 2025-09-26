@@ -43,5 +43,6 @@ setup(
         "tifffile",
         "ipywidgets",
         "PyYAML",
+        "moviepy",
     ],
 )
