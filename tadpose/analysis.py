@@ -98,13 +98,10 @@ def angles_diff(tad, part_tuple1, track_idx=0, frames=None):
 # Same as anlges diff
 def angular_velocity(tad, part1, part2, track_idx=0, frames=None, in_degree=True):
     frames = tad.check_frames(frames)
-    locs = tad.locs(track_idx=track_idx)[frames]
+    locs = tad.locs(parts=(part1, part2), track_idx=track_idx)[frames]
 
-    part1_idx = tad.bodyparts.index(part1)
-    part2_idx = tad.bodyparts.index(part2)
-
-    part1 = locs[:, part1_idx, :]
-    part2 = locs[:, part2_idx, :]
+    part1 = locs[:, 0, :]
+    part2 = locs[:, 1, :]
 
     vec1 = part1 - part2
 
