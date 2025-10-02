@@ -352,7 +352,7 @@ class StrideProperties:
 
             cnt += 1
 
-        return np.array(step_lengths), np.array(step_widths)
+        return np.stack((step_lengths, step_widths), axis=-1)
 
     def raw_lateral_displacement(self, strides, part, part_to_proj_on, debug_plot=8):
         def cross2d(x, y):
@@ -472,6 +472,8 @@ class StrideProperties:
             if len(i_peaks) > 0:
                 i_max_peak = i_peaks[np.argmax(sy[i_peaks])]
 
-                phase.append(i_max_peak)
+            phase.append(i_max_peak)
 
-        return np.array(displ) * self.pixel_size, np.array(phase) / 100
+        return np.stack(
+            (np.array(displ) * self.pixel_size, np.array(phase) / 100), axis=-1
+        )
