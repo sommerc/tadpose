@@ -319,7 +319,7 @@ class StrideProperties:
             step_lengths.append(step_length)
 
             if cnt == debug_plot:
-                f, (ax, ax_p) = plt.subplots(1, 2)
+                f, (ax, ax_p) = plt.subplots(1, 2, figsize=(12, 5))
                 ax.imshow(
                     self.mouse.image(stride[0]),
                     "Reds",
@@ -347,6 +347,8 @@ class StrideProperties:
                 ax_p.axvline(stride[0], color="g", label="Stride Start")
                 ax_p.axvline(stride[2], color="r", label="Stride End")
                 ax_p.set_xlim(int(stride[0]) - 100, int(stride[2]) + 100)
+                ax_p.set_xlabel("Time (frames)")
+                ax_p.set_label("Aligned paw y-location")
 
                 ax.legend()
 
