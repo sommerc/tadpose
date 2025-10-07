@@ -1,8 +1,6 @@
 import numpy as np
-import pandas as pd
 from .analysis import angular_velocity
 
-from collections import defaultdict
 
 from matplotlib import pyplot as plt
 from scipy import ndimage as ndi
@@ -16,6 +14,15 @@ from skimage import measure as skm
 
 class Stride:
     def __init__(self, mouse, paw_part, min_peak_prominence_px, sigma=0, track_idx=0):
+        """
+        Initializes the gait analysis object for a specific mouse and paw part.
+        Args:
+            mouse: The mouse object associated with the gait analysis.
+            paw_part: The specific paw part (e.g., 'left_hind', 'right_fore') to analyze.
+            min_peak_prominence_px (float): Minimum peak prominence in pixels for stride detection.
+            sigma (float, optional): Standard deviation for Gaussian smoothing of the paw signal. Defaults to 0 (no smoothing).
+            track_idx (int, optional): Index of the tracking data to use. Defaults to 0.
+        """
         self.mouse = mouse
         self.paw_part = paw_part
         self.min_peak_prominence = min_peak_prominence_px
@@ -27,6 +34,19 @@ class Stride:
         self._valid_strides_bind = None
 
     def find_strides(self):
+        """
+        Detects stride cycles based on the paw position signal.
+        This method processes the paw position signal for a specified paw part,
+        optionally applies Gaussian smoothing, and identifies local maxima and minima
+        as stance and swing phase transitions, respectively. It then constructs an array
+        of stride frames, where each row contains the indices for stance start, swing start,
+        and stride stop for each detected stride.
+
+        Sets the following attributes:
+            - self.paw_signal: The processed paw position signal.
+            - self._stride_frames: A (N-1, 3) array of stride frame indices, where each row is
+                [stance_start, swing_start, stride_stop].
+        """
         self.paw_signal = self.mouse.ego_locs(
             parts=(self.paw_part,), fill_missing=True, track_idx=self.track_idx
         )[:, 0, 1]
@@ -70,7 +90,7 @@ class Stride:
         frames = np.arange(slc.start, slc.stop)
 
         sig_min = self.paw_signal[slc].min()
-        sig_height = self.paw_signal[slc].max() - self.paw_signal.min()
+        sig_height = self.paw_signal[slc].max() - self.paw_signal[slc].min()
 
         ax.plot(
             frames, self.paw_signal[slc], color=color_stance, label=f"{self.paw_part}"
@@ -107,6 +127,10 @@ class Stride:
         ax.set_ylabel(f"Aligned\n{self.paw_part}")
 
     def validate_strides(self, other):
+        """
+        Validates the strides of another object by checking if each stride interval in the current object
+        contains at least one stance start from the other object's stride frames.
+        """
         bins = np.r_[self._stride_frames[:, 0], self._stride_frames[-1, 2]]
 
         other_stance_start = other._stride_frames[:, 0]
@@ -124,7 +148,7 @@ class Stride:
 
         return self._stride_frames[strides_bind]
 
-    def decribe(self):
+    def describe(self):
         print(
             f"Strides for '{self.paw_part}'\n # Strides: {len(self._stride_frames)}\n # Strides (valid): {len(self.stride_frames)}"
         )
@@ -152,23 +176,25 @@ class Stride:
             if rp.area > min_duration:
                 yield rp.slice[0]
 
-    # def stride_idx_of_frame(self, frame):
-    #     sidx = np.nonzero(
-    #         np.logical_and(
-    #             self.stride_frames[:, 0] <= frame,
-    #             self.stride_frames[:, 2] > frame,
-    #         )
-    #     )[0]
+    def stride_idx_of_frame(self, frame):
+        sidx = np.nonzero(
+            np.logical_and(
+                self.stride_frames[:, 0] <= frame,
+                self.stride_frames[:, 2] > frame,
+            )
+        )[0]
 
-    #     if len(sidx) == 0:
-    #         return -1
-    #     return sidx[0]
+        if len(sidx) == 0:
+            return -1
+        return sidx[0]
 
 
 def project_point_on_line(line_p1, line_p2, pnt):
     line_dist = np.sum((line_p1 - line_p2) ** 2)
     if line_dist == 0:
-        print("project_point_on_line(): line_p1 and line_p2 are the same points")
+        raise AttributeError(
+            "project_point_on_line(): line_p1 and line_p2 are the same points"
+        )
 
     t = np.sum((pnt - line_p1) * (line_p2 - line_p1)) / line_dist
 
@@ -178,6 +204,15 @@ def project_point_on_line(line_p1, line_p2, pnt):
 
 class StrideProperties:
     def __init__(self, mouse, mask, pixel_size, min_duration_sec, track_idx):
+        """
+        Initializes the gait analysis object with mouse data, mask, and analysis parameters.
+        Args:
+            mouse: An object representing the mouse, expected to have a 'video_fps' attribute.
+            mask: The mask to be applied for gait analysis.
+            pixel_size: The size of a pixel in real-world units.
+            min_duration_sec: Minimum duration (in seconds) for a valid gait event.
+            track_idx: Index of the track to be analyzed.
+        """
         self.mouse = mouse
         self.mask = mask
 
@@ -187,6 +222,18 @@ class StrideProperties:
         self.track_idx = track_idx
 
     def angular_velocity(self, strides, part_axis):
+        """
+        Computes the mean angular velocity for each stride segment defined in the input.
+        Parameters:
+            strides: An object providing stride segmentation, expected to have a `strides_in_label` method.
+            part_axis: A tuple or list specifying the body part axes to compute angular velocity between.
+        Returns:
+            np.ndarray: Array of mean angular velocities for each stride segment.
+        Notes:
+            - Uses the `angular_velocity` function to compute per-frame angular velocities between specified axes.
+            - The result is scaled by the frame rate (`self.fps`).
+            - Only stride segments that satisfy `self.mask` and `self.min_duration` are considered.
+        """
         av_seq = (
             angular_velocity(
                 self.mouse, part_axis[0], part_axis[1], track_idx=self.track_idx
@@ -204,6 +251,19 @@ class StrideProperties:
         return np.array(res)
 
     def distance(self, strides, part_a, part_b):
+        """
+        Calculates the mean Euclidean distance between two specified body parts over each detected stride.
+        For each stride segment defined by the input `strides`, this method computes the average distance
+        (in physical units, accounting for `self.pixel_size`) between `part_a` and `part_b` using their
+        tracked locations.
+        Args:
+            strides: An object providing stride segmentation, expected to have a `strides_in_label` method
+                     that yields (stance_start, swing_start, stride_stop) tuples.
+            part_a: The name or index of the first body part to measure.
+            part_b: The name or index of the second body part to measure.
+        Returns:
+            np.ndarray: An array of mean distances (one per stride) between `part_a` and `part_b`.
+        """
         locs = self.mouse.locs(
             parts=(part_a, part_b), track_idx=self.track_idx
         ).squeeze()
@@ -226,6 +286,18 @@ class StrideProperties:
         return np.array(res)
 
     def stride_length(self, strides):
+        """
+        Calculates the stride lengths for a series of strides.
+        Parameters:
+            strides: An object containing stride information, including paw part and stride intervals.
+        Returns:
+            np.ndarray: An array of stride lengths, where each element corresponds to the distance (in physical units)
+            between the stance start and stride stop locations for each stride.
+        Notes:
+            - Uses the mouse's tracked locations for the specified paw part and track index.
+            - Stride intervals are determined using the provided mask and minimum duration.
+            - Distances are scaled by the pixel size to convert from pixels to physical units.
+        """
         locs = self.mouse.locs(
             parts=(strides.paw_part,), track_idx=self.track_idx
         ).squeeze()
@@ -242,7 +314,24 @@ class StrideProperties:
         return np.array(res)
 
     def stride_speed(self, strides, part_for_speed):
-        part_spped = (
+        """
+        Calculates the average speed of a specified body part during each stride.
+        Parameters
+        ----------
+        strides : object
+            An object that provides stride intervals via the `strides_in_label` method.
+        part_for_speed : str or int
+            The identifier for the body part whose speed is to be calculated.
+        Returns
+        -------
+        np.ndarray
+            An array containing the mean speed of the specified body part for each stride interval.
+        Notes
+        -----
+        - The speed is computed using the `mouse.speed` method, scaled by `pixel_size` and `fps`.
+        - Only stride intervals that satisfy the mask and minimum duration are considered.
+        """
+        part_speed = (
             self.mouse.speed(
                 part=part_for_speed, sigma=0, pre_sigma=0, track_idx=self.track_idx
             )
@@ -255,18 +344,43 @@ class StrideProperties:
         for stance_start, swing_start, stride_stop in strides.strides_in_label(
             self.mask, self.min_duration
         ):
-            res.append(part_spped[stance_start:stride_stop].mean())
+            res.append(part_speed[stance_start:stride_stop].mean())
 
         return np.array(res)
 
     def duty_factor(self, strides):
+        """
+        Calculates the duty factor for each stride based on stride frame indices.
+        The duty factor is defined as the ratio of the stance phase duration to the total stride duration.
+        Args:
+            strides: An object that provides the `strides_in_label(mask, min_duration)` method,
+                which returns a NumPy array of shape (N, 3), where each row contains the start,
+                stance, and end frame indices for a stride.
+        Returns:
+            numpy.ndarray: An array of duty factors for each stride, computed as
+                (stance_duration / stride_duration).
+        """
         stride_frames = strides.strides_in_label(self.mask, self.min_duration)
 
         stance_duration = stride_frames[:, 1] - stride_frames[:, 0]
         stride_duration = stride_frames[:, 2] - stride_frames[:, 0]
         return stance_duration / stride_duration
 
-    def step_distances(self, strides, strides_opposite, debug_plot=8):
+    def step_distances(self, strides, strides_opposite, debug_plot=-1):
+        """
+        Calculates the step lengths and widths for each stride in a gait cycle.
+        For each stride in the provided `strides` object, this method finds the corresponding stance phase
+        in the opposite limb (`strides_opposite`), projects the opposite paw location onto the stride line,
+        and computes the step length (distance along the stride direction) and step width (perpendicular distance).
+        Optionally, a debug plot can be generated for a specific stride.
+        Args:
+            strides: An object representing the strides of the limb in question, containing stride frames and paw part information.
+            strides_opposite: An object representing the strides of the opposite limb, containing stride frames and paw part information.
+            debug_plot (int, optional): The index of the stride for which to generate a debug plot. Defaults to -1 (no plot).
+        Returns:
+            np.ndarray: An array of shape (N, 2), where N is the number of strides. Each row contains
+                [step_length, step_width] for a stride. Values are in physical units (e.g., mm).
+        """
         paw_locs = self.mouse.locs(
             parts=(
                 strides_opposite.paw_part,
@@ -455,6 +569,25 @@ class StrideProperties:
     def lateral_displacements_metrics(
         self, strides, part, part_to_proj_on, sigma_pf=3, debug_plot=-1
     ):
+        """
+        Computes lateral displacement metrics for a specified body part across multiple strides.
+        For each stride, calculates the maximum lateral displacement and the phase (as a fraction of stride duration)
+        at which the maximum peak occurs after smoothing the displacement signal.
+        Args:
+            strides (iterable): Collection of stride data to analyze.
+            part (str or int): Identifier for the body part whose displacement is measured.
+            part_to_proj_on (str or int): Identifier for the body part or axis onto which the displacement is projected.
+            sigma_pf (float, optional): Standard deviation for Gaussian smoothing of the displacement signal. Default is 3.
+            debug_plot (int, optional): If non-negative, enables debug plotting for the specified stride index. Default is -1.
+        Returns:
+            np.ndarray: Array of shape (N, 2), where N is the number of strides. Each row contains:
+                - Maximum lateral displacement (in physical units, e.g., microns or mm)
+                - Phase (fraction of stride, between 0 and 1) at which the maximum peak occurs
+        Notes:
+            - Uses Gaussian smoothing to reduce noise in the displacement signal.
+            - The phase is computed relative to a normalized stride duration.
+        """
+
         rld = self.raw_lateral_displacement(
             strides, part, part_to_proj_on, debug_plot=debug_plot
         )
