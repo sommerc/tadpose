@@ -5,6 +5,7 @@ from .analysis import angular_velocity
 from matplotlib import pyplot as plt
 from scipy import ndimage as ndi
 from scipy.signal import find_peaks
+from scipy.stats import pearsonr
 from scipy.ndimage import gaussian_filter1d
 
 from matplotlib.patches import Rectangle
@@ -189,7 +190,7 @@ class Stride:
         return sidx[0]
 
 
-def project_point_on_line(line_p1, line_p2, pnt):
+def project_point_on_line(line_p1, line_p2, pnt, must_be_on_line=False):
     line_dist = np.sum((line_p1 - line_p2) ** 2)
     if line_dist == 0:
         raise AttributeError(
@@ -197,6 +198,8 @@ def project_point_on_line(line_p1, line_p2, pnt):
         )
 
     t = np.sum((pnt - line_p1) * (line_p2 - line_p1)) / line_dist
+    if must_be_on_line and not (0 < t < 1):
+        raise AttributeError("project_point_on_line(): pnt not in line")
 
     pnt_projection = line_p1 + t * (line_p2 - line_p1)
     return pnt_projection
@@ -366,6 +369,26 @@ class StrideProperties:
         stride_duration = stride_frames[:, 2] - stride_frames[:, 0]
         return stance_duration / stride_duration
 
+    def stride_duration(self, strides):
+        """
+        Calculate stance and stride durations for given strides.
+        Parameters:
+            strides: An object with a `strides_in_label` method that returns an array of stride frame indices.
+                     The method is called with `self.mask` and `self.min_duration` as arguments.
+        Returns:
+            np.ndarray: A stacked array of shape (N, 3), where N is the number of strides.
+                - The first column contains stance durations (frames).
+                - The second column contains stride durations (frames).
+                - The third column contains the starting frame index of each stride.
+        """
+        stride_frames = strides.strides_in_label(self.mask, self.min_duration)
+
+        stance_duration = stride_frames[:, 1] - stride_frames[:, 0]
+        stride_duration = stride_frames[:, 2] - stride_frames[:, 0]
+        return np.stack(
+            [stance_duration, stride_duration, stride_frames[:, 0]], axis=-1
+        )
+
     def step_distances(self, strides, strides_opposite, debug_plot=-1):
         """
         Calculates the step lengths and widths for each stride in a gait cycle.
@@ -401,6 +424,7 @@ class StrideProperties:
 
         step_widths = []
         step_lengths = []
+        step_phases = []
 
         for stride in strides_frames:
             match_index = np.nonzero(
@@ -424,10 +448,19 @@ class StrideProperties:
 
             p_opp = paw_locs[stride_opp_stance, 0]
 
-            p_opp_proj = project_point_on_line(p2, p1, p_opp)
+            try:
+                p_opp_proj = project_point_on_line(p2, p1, p_opp, must_be_on_line=True)
+            except AttributeError:
+                step_widths.append(np.nan)
+                step_lengths.append(np.nan)
+                step_phases.append(np.nan)
+                continue
 
             step_length = np.linalg.norm(p2 - p_opp_proj) * self.pixel_size
             step_width = np.linalg.norm(p_opp - p_opp_proj) * self.pixel_size
+            step_phase = (stride_opp_stance - stride[0]) / (stride[2] - stride[0])
+
+            step_phases.append(step_phase)
 
             step_widths.append(step_width)
             step_lengths.append(step_length)
@@ -468,7 +501,7 @@ class StrideProperties:
 
             cnt += 1
 
-        return np.stack((step_lengths, step_widths), axis=-1)
+        return np.stack((step_lengths, step_widths, step_phases), axis=-1)
 
     def raw_lateral_displacement(self, strides, part, part_to_proj_on, debug_plot=8):
         def cross2d(x, y):
@@ -612,3 +645,63 @@ class StrideProperties:
         return np.stack(
             (np.array(displ) * self.pixel_size, np.array(phase) / 100), axis=-1
         )
+
+    def stride_x_corr(self, strides, xcorr_part, debug_plot=1):
+        strides_frames = strides.strides_in_label(self.mask, self.min_duration)
+
+        # real locs 0 for the stride opposite side, 1 for the side in question
+        xcorr_ego_locs = self.mouse.ego_locs(
+            parts=(
+                strides.paw_part,
+                xcorr_part,
+            ),
+            track_idx=self.track_idx,
+        )
+
+        res = []
+        for stride_ix, (stance_start, swing_start, stride_end) in enumerate(
+            strides_frames
+        ):
+            sig = xcorr_ego_locs[stance_start:stride_end, 0, 1]
+            opp_sig = xcorr_ego_locs[stance_start:stride_end, 1, 1]
+
+            sig = (sig - sig.mean()) / sig.std()
+            opp_sig = (opp_sig - opp_sig.mean()) / opp_sig.std()
+
+            sig_corr_stride = pearsonr(sig, opp_sig).statistic
+
+            sig_corr_stance = pearsonr(
+                sig[: swing_start - stance_start], opp_sig[: swing_start - stance_start]
+            ).statistic
+
+            sig_corr_swing = pearsonr(
+                sig[swing_start - stance_start :], opp_sig[swing_start - stance_start :]
+            ).statistic
+
+            res.append((sig_corr_stride, sig_corr_stance, sig_corr_swing))
+
+            cc = np.correlate(sig, opp_sig, mode="full")
+            print(cc.shape)
+
+            if stride_ix == debug_plot:
+                f, ax = plt.subplots()
+                ax.plot(
+                    sig,
+                    label=strides.paw_part,
+                )
+                ax.plot(opp_sig, label=xcorr_part)
+                # ax.plot(cc, label="corr")
+                ax.axvline(
+                    swing_start - stance_start,
+                    color="gray",
+                    ls="--",
+                    label="Swing Start",
+                )
+                # ax.set_title(
+                #     f"Stride {stride_ix} xcorr:\nstride: {sig_corr_stride:.3f}\nstance: {sig_corr_stance:.3f}\nswing{sig_corr_swing:.3f}"
+                # )
+                ax.set_title(f"Stride {stride_ix} xcorr: {sig_corr_stride:.3f}")
+
+                ax.legend()
+
+        return np.array(res)
