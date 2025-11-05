@@ -306,7 +306,13 @@ class SleapTadpole(Tadpole):
         _vid_handle.release()
 
     def bbox_image_gen(
-        self, center_part, frames=None, track_idx=0, dest_height=100, dest_width=100
+        self,
+        center_part,
+        frames=None,
+        track_idx=0,
+        dest_height=100,
+        dest_width=100,
+        smooth_sigma=0,
     ):
         frames = self.check_frames(frames)
 
@@ -319,6 +325,11 @@ class SleapTadpole(Tadpole):
             parts=(center_part,),
             fill_missing=True,
         )[:, 0, :]
+
+        if smooth_sigma > 0:
+            center_part_loc = utils.gaussian_filter1d(
+                center_part_loc, smooth_sigma, axis=0
+            )
 
         center_part_loc = np.round(center_part_loc).astype(int)
 
