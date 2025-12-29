@@ -662,6 +662,10 @@ class StrideProperties:
         for stride_ix, (stance_start, swing_start, stride_end) in enumerate(
             strides_frames
         ):
+            if swing_start - stance_start < 2:
+                res.append((np.nan,))
+                continue
+
             sig = xcorr_ego_locs[stance_start:stride_end, 0, 1]
             opp_sig = xcorr_ego_locs[stance_start:stride_end, 1, 1]
 
@@ -670,18 +674,19 @@ class StrideProperties:
 
             sig_corr_stride = pearsonr(sig, opp_sig).statistic
 
-            sig_corr_stance = pearsonr(
-                sig[: swing_start - stance_start], opp_sig[: swing_start - stance_start]
-            ).statistic
+            # sig_corr_stance = pearsonr(
+            #     sig[: swing_start - stance_start], opp_sig[: swing_start - stance_start]
+            # ).statistic
 
-            sig_corr_swing = pearsonr(
-                sig[swing_start - stance_start :], opp_sig[swing_start - stance_start :]
-            ).statistic
+            # sig_corr_swing = pearsonr(
+            #     sig[swing_start - stance_start :], opp_sig[swing_start - stance_start :]
+            # ).statistic
 
-            res.append((sig_corr_stride, sig_corr_stance, sig_corr_swing))
+            res.append((sig_corr_stride,))
+            # res.append((sig_corr_stride, sig_corr_stance, sig_corr_swing))
 
-            cc = np.correlate(sig, opp_sig, mode="full")
-            print(cc.shape)
+            # cc = np.correlate(sig, opp_sig, mode="full")
+            
 
             if stride_ix == debug_plot:
                 f, ax = plt.subplots()
