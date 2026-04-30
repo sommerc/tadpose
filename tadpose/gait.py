@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 from .analysis import angular_velocity
 
 
@@ -58,6 +59,12 @@ class Stride:
         # hpr = hpr[38:]
         maxima, _ = find_peaks(self.paw_signal, prominence=self.min_peak_prominence)
         minima, _ = find_peaks(-self.paw_signal, prominence=self.min_peak_prominence)
+
+        if len(maxima) == 0 or len(minima) == 0:
+            raise ValueError(
+                f"Stride.find_strides(): no peaks found for '{self.paw_part}'. "
+                "Lower min_peak_prominence_px or check the paw signal."
+            )
 
         if maxima[0] > minima[0]:
             minima = minima[1:]
@@ -439,6 +446,7 @@ class StrideProperties:
                 )
                 step_widths.append(np.nan)
                 step_lengths.append(np.nan)
+                step_phases.append(np.nan)
                 continue
 
             stride_opp_stance = strides_frames_opp[match_index[0], 0]
@@ -495,7 +503,7 @@ class StrideProperties:
                 ax_p.axvline(stride[2], color="r", label="Stride End")
                 ax_p.set_xlim(int(stride[0]) - 100, int(stride[2]) + 100)
                 ax_p.set_xlabel("Time (frames)")
-                ax_p.set_label("Aligned paw y-location")
+                ax_p.set_ylabel("Aligned paw y-location")
 
                 ax.legend()
 
@@ -521,7 +529,7 @@ class StrideProperties:
             strides_frames
         ):
             p1 = part_to_proj_on_locs[stance_start]
-            p2 = part_to_proj_on_locs[stride_end + 1]
+            p2 = part_to_proj_on_locs[min(stride_end + 1, len(part_to_proj_on_locs) - 1)]
 
             ps = [parts_locs[pt] for pt in range(stance_start, stride_end + 1)]
 
@@ -537,7 +545,8 @@ class StrideProperties:
             )
 
             if stride_ix == debug_plot:
-                fig = plt.figure(figsize=(6, 10)).subplot_mosaic(
+                fig = plt.figure(figsize=(6, 10))
+                axs = fig.subplot_mosaic(
                     mosaic="""
                             AAAAAA
                             AAAAAA
@@ -545,8 +554,8 @@ class StrideProperties:
                             BBBBBB
                             """,
                 )
-                ax1 = fig["A"]
-                ax2 = fig["B"]
+                ax1 = axs["A"]
+                ax2 = axs["B"]
 
                 ax1.imshow(
                     self.mouse.image(stance_start),
@@ -663,11 +672,15 @@ class StrideProperties:
             strides_frames
         ):
             if swing_start - stance_start < 2:
-                res.append((np.nan,))
+                res.append(np.nan)
                 continue
 
             sig = xcorr_ego_locs[stance_start:stride_end, 0, 1]
             opp_sig = xcorr_ego_locs[stance_start:stride_end, 1, 1]
+
+            if sig.std() == 0 or opp_sig.std() == 0:
+                res.append(np.nan)
+                continue
 
             sig = (sig - sig.mean()) / sig.std()
             opp_sig = (opp_sig - opp_sig.mean()) / opp_sig.std()
@@ -682,7 +695,7 @@ class StrideProperties:
             #     sig[swing_start - stance_start :], opp_sig[swing_start - stance_start :]
             # ).statistic
 
-            res.append((sig_corr_stride,))
+            res.append(sig_corr_stride)
             # res.append((sig_corr_stride, sig_corr_stance, sig_corr_swing))
 
             # cc = np.correlate(sig, opp_sig, mode="full")
@@ -710,3 +723,103 @@ class StrideProperties:
                 ax.legend()
 
         return np.array(res)
+
+
+def stride_to_dataframe(
+    sp,
+    strides,
+    strides_opposite=None,
+    stride_type="",
+    video_fn=None,
+    part_for_speed=None,
+    parts_angular_velocity=None,
+    parts_lat_displacement=None,
+    part_xcorr=None,
+):
+    """
+    Compute all per-stride gait metrics and return them as a tidy DataFrame.
+
+    One row per stride. Multiple paws can be stacked with pd.concat() because
+    the 'paw' column distinguishes them.
+
+    Parameters
+    ----------
+    sp : StrideProperties
+        Carries mouse, pixel_size, fps, mask, min_duration, track_idx.
+    strides : Stride
+        The paw whose strides define the rows.
+    strides_opposite : Stride, optional
+        Contralateral paw — required for step_length, step_width, step_phase.
+    stride_type : str
+        Label for the limb pair, e.g. "Hind" or "Fore".
+    video_fn : str or Path, optional
+        Source video path stored as a string column for provenance.
+    part_for_speed : str, optional
+        Body part used for stride_speed (e.g. "Spine_Center").
+    parts_angular_velocity : tuple of str, optional
+        Two body parts defining the angular-velocity axis, e.g. ("Neck_Base", "Tail_Base").
+    parts_lat_displacement : dict, optional
+        Mapping ``label -> (part, part_to_proj_on)`` for lateral displacement metrics,
+        e.g. ``{"Nose": ("Nose", "Spine_Center"), "Tail_base": ("Tail_Base", "Spine_Center")}``.
+    part_xcorr : str, optional
+        Body part to cross-correlate the paw signal against.
+
+    Returns
+    -------
+    pd.DataFrame
+        Columns: video_fn, paw, stride_type, stance_start_frame, swing_start_frame,
+        stride_stop_frame, stance_start_sec, stride_duration_sec, duty_factor,
+        stance_start_x_cm, stance_start_y_cm, stride_stop_x_cm, stride_stop_y_cm,
+        stride_length_cm, [stride_speed_cm_s], [angular_vel_deg_s],
+        [step_length_cm, step_width_cm, step_phase], [xcorr],
+        [lat_displ_dist_<label>_cm, lat_displ_phase_<label>].
+    """
+    stride_frames = strides.strides_in_label(sp.mask, sp.min_duration)
+
+    if len(stride_frames) == 0:
+        return pd.DataFrame()
+
+    paw_locs = sp.mouse.locs(
+        parts=(strides.paw_part,), track_idx=sp.track_idx
+    ).squeeze()
+
+    rows = {
+        "video_fn": str(video_fn) if video_fn is not None else sp.mouse.video_fn,
+        "paw": strides.paw_part,
+        "stride_type": stride_type,
+        "track_idx": sp.track_idx,
+        "stance_start_frame": stride_frames[:, 0].astype(int),
+        "swing_start_frame": stride_frames[:, 1].astype(int),
+        "stride_stop_frame": stride_frames[:, 2].astype(int),
+        "stance_start_sec": stride_frames[:, 0] / sp.fps,
+        "stride_duration_sec": (stride_frames[:, 2] - stride_frames[:, 0]) / sp.fps,
+        "duty_factor": sp.duty_factor(strides),
+        "stance_start_x_cm": paw_locs[stride_frames[:, 0], 0] * sp.pixel_size,
+        "stance_start_y_cm": paw_locs[stride_frames[:, 0], 1] * sp.pixel_size,
+        "stride_stop_x_cm": paw_locs[stride_frames[:, 2], 0] * sp.pixel_size,
+        "stride_stop_y_cm": paw_locs[stride_frames[:, 2], 1] * sp.pixel_size,
+        "stride_length_cm": sp.stride_length(strides),
+    }
+
+    if part_for_speed is not None:
+        rows["stride_speed_cm_s"] = sp.stride_speed(strides, part_for_speed)
+
+    if parts_angular_velocity is not None:
+        rows["angular_vel_deg_s"] = sp.angular_velocity(strides, parts_angular_velocity)
+
+    if strides_opposite is not None:
+        step = sp.step_distances(strides, strides_opposite, debug_plot=-1)
+        rows["step_length_cm"] = step[:, 0]
+        rows["step_width_cm"] = step[:, 1]
+        rows["step_phase"] = step[:, 2]
+
+    if part_xcorr is not None:
+        rows["xcorr"] = sp.stride_x_corr(strides, part_xcorr, debug_plot=-1)
+
+    if parts_lat_displacement is not None:
+        for label, (part, proj_part) in parts_lat_displacement.items():
+            ld = sp.lateral_displacements_metrics(strides, part, proj_part, debug_plot=-1)
+            rows[f"lat_displ_dist_{label}_cm"] = ld[:, 0]
+            rows[f"lat_displ_phase_{label}"] = ld[:, 1]
+
+    return pd.DataFrame(rows)
