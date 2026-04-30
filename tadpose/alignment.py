@@ -15,6 +15,7 @@ class RotationalAligner:
         self.align_to = align_to
         self.alignment_matrices = {}
         self.transformations = {}
+        self.heading_vectors = {}
 
     def fit(self, track_idx, all_bodyparts, all_locations):
         for bp in self.bodyparts_to_align:
@@ -37,8 +38,9 @@ class RotationalAligner:
         Os[:] = self.align_to
 
         # compute angles for all
-        self.heading_vectors = Ps[:, 1] + Ts
-        ang = -utils.angles(self.heading_vectors, Os, in_degree=False)
+        hv = Ps[:, 1] + Ts
+        self.heading_vectors[track_idx] = hv
+        ang = -utils.angles(hv, Os, in_degree=False)
 
         # get rotation matrix
         c = np.cos(ang)
