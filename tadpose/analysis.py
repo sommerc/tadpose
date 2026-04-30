@@ -142,7 +142,7 @@ class ReparametrizedSplineFit:
         self.arclen = np.linspace(0, 1, n_interpolants)
         self.spline, u = sp.interpolate.splprep(points_eval.T, u=arclen, s=0)
 
-    def singed_curvature(self):
+    def signed_curvature(self):
         xp, yp = sp.interpolate.splev(self.arclen, self.spline, der=1)
         xpp, ypp = sp.interpolate.splev(self.arclen, self.spline, der=2)
 
@@ -183,7 +183,7 @@ class ReparametrizedCSAPSSplineFit:
 
         self.arclen = np.linspace(0, 1, n_interpolants)
 
-    def singed_curvature(self):
+    def signed_curvature(self):
         xp, yp = self.spline(self.arclen, nu=1)
         xpp, ypp = self.spline(self.arclen, nu=2)
 
