@@ -421,6 +421,55 @@ class SleapTadpole(Tadpole):
 
         return speed
 
+    def forward_speed(self, part="Spine_Center", sigma=0, track_idx=0, fill_missing=False):
+        """
+        Compute the signed forward speed — displacement projected onto the body axis.
+
+        Positive values mean the animal is moving in the direction it faces;
+        negative values mean it is moving backward. Unlike speed(), this ignores
+        lateral and vertical displacement.
+
+        Requires an aligner to be set (mouse.aligner = ...) so that heading
+        vectors are available.
+
+        Parameters
+        ----------
+        part : str
+            Body part whose position is differentiated. Default "Spine_Center".
+        sigma : float
+            Gaussian smoothing sigma in frames applied to the result. 0 = no smoothing.
+        track_idx : int
+            Which animal track to use.
+        fill_missing : bool
+            Whether to interpolate NaN positions before differentiating.
+            False (default) preserves NaN for undetected frames.
+
+        Returns
+        -------
+        np.ndarray, shape (nframes,)
+            Forward speed in pixels/frame. Multiply by pixel_size * fps for cm/s.
+        """
+        if self.aligner is None:
+            raise RuntimeError(
+                "forward_speed() requires an aligner. Set mouse.aligner first."
+            )
+
+        hv = self.aligner.heading_vectors[track_idx]
+        norms = np.linalg.norm(hv, axis=1, keepdims=True)
+        hv = hv / norms
+
+        part_loc = self.locs(
+            parts=(part,), track_idx=track_idx, fill_missing=fill_missing
+        ).squeeze()
+        disp = np.gradient(part_loc, axis=0)
+
+        fwd = (hv * disp).sum(axis=1)
+
+        if sigma > 0:
+            fwd = utils.gaussian_filter1d(fwd, sigma)
+
+        return fwd
+
     def acceleration(self, part, frames=None, track_idx=0, sigma=0):
         frames = self.check_frames(frames)
 
@@ -453,7 +502,7 @@ class SleapTadpole(Tadpole):
 
         get_curvature = lambda points: SplineClass(
             points, n_interpolants, spline_smooth
-        ).singed_curvature()
+        ).signed_curvature()
 
         return np.stack(list(map(get_curvature, parts_positions)))
 
