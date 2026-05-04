@@ -8,4 +8,4 @@ from . import gait
 
 from .tadpose import Tadpole
 
-__all__ = [tadpose, visu, utils, analysis, alignment, plot, Tadpole]
+__all__ = [tadpose, visu, utils, analysis, alignment, plot, Tadpole, gait]

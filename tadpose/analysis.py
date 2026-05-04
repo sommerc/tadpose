@@ -337,3 +337,5 @@ class SocialReceptiveField:
         up_part_pos = self.tad.ego_locs(track_idx=0, parts=(self.up_part,))[frame, 0]
         ax2.arrow(0, 0, *up_part_pos, color="red", width=2, head_width=5)
         ax2.set_title(f"SRF heatmap of other's mouse {self.other_part}")
+
+
