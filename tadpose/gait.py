@@ -916,7 +916,6 @@ def stride_to_dataframe(
     strides,
     strides_opposite=None,
     stride_type="",
-    video_fn=None,
     part_for_speed=None,
     parts_angular_velocity=None,
     parts_lat_displacement=None,
@@ -939,8 +938,6 @@ def stride_to_dataframe(
         Contralateral paw — required for step_length, step_width, step_phase.
     stride_type : str
         Label for the limb pair, e.g. "Hind" or "Fore".
-    video_fn : str or Path, optional
-        Source video path stored as a string column for provenance.
     part_for_speed : str, optional
         Body part used for stride_speed (e.g. "Spine_Center").
     parts_angular_velocity : tuple of str, optional
@@ -971,7 +968,7 @@ def stride_to_dataframe(
     ).squeeze()
 
     rows = {
-        "Video_fn": str(video_fn) if video_fn is not None else sp.mouse.video_fn,
+        "Video_fn": sp.mouse.video_fn,
         "Track_idx": sp.track_idx,
         "Stride_type": stride_type,
         "Paw": strides.paw_part,
@@ -1085,9 +1082,9 @@ class GaitAnalysis:
         columns and the duty-factor temporal-symmetry index.
     """
 
-    def __init__(self, video_fn: str, track_idx: int, cfg: dict):
+    def __init__(self, mouse: Tadpole, track_idx: int, cfg: dict):
         self.cfg = cfg
-        self.mouse = Tadpole.from_sleap(video_fn)
+        self.mouse = mouse
 
         self.mouse.aligner = RotationalAligner(
             central_part=self.cfg["ALIGN_CENTRAL"],
@@ -1263,8 +1260,6 @@ class GaitAnalysis:
             for c in tab.columns:
                 if c.startswith("lat_displ_dist_"):
                     cols_to_norm.append(c)
-
-            print(cols_to_norm)
 
             for col in cols_to_norm:
                 if col in tab.columns:
