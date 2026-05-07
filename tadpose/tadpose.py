@@ -407,7 +407,7 @@ class SleapTadpole(Tadpole):
     def speed(self, part, frames=None, track_idx=0, pre_sigma=0, sigma=0):
         frames = self.check_frames(frames)
 
-        part_loc = self.locs(parts=(part,), track_idx=track_idx).squeeze()[frames]
+        part_loc = self.locs(parts=(part,), track_idx=track_idx, fill_missing=False).squeeze()[frames]
 
         if pre_sigma > 0:
             for c in range(2):
@@ -473,15 +473,15 @@ class SleapTadpole(Tadpole):
     def acceleration(self, part, frames=None, track_idx=0, sigma=0):
         frames = self.check_frames(frames)
 
-        part_loc = self.locs(parts=(part,), track_idx=track_idx).squeeze()[frames]
+        part_loc = self.locs(parts=(part,), track_idx=track_idx, fill_missing=False).squeeze()[frames]
         part_disp = np.gradient(part_loc, axis=0)
         part_disp2 = np.gradient(part_disp, axis=0)
-        speed = np.linalg.norm(part_disp2, axis=1)
+        acc = np.linalg.norm(part_disp2, axis=1)
 
         if sigma > 0:
-            speed = utils.gaussian_filter1d(speed, sigma)
+            acc = utils.gaussian_filter1d(acc, sigma)
 
-        return speed
+        return acc
 
     def angles_from_segment(self, parts, frames=None, track_idx=0, win=None):
         angles = []
@@ -500,9 +500,10 @@ class SleapTadpole(Tadpole):
 
         parts_positions = self.ego_locs(parts=tuple(parts), track_idx=track_idx)[frames]
 
-        get_curvature = lambda points: SplineClass(
-            points, n_interpolants, spline_smooth
-        ).signed_curvature()
+        def get_curvature(points):
+            return SplineClass(
+                    points, n_interpolants, spline_smooth
+                ).signed_curvature()
 
         return np.stack(list(map(get_curvature, parts_positions)))
 
@@ -513,9 +514,10 @@ class SleapTadpole(Tadpole):
 
         parts_positions = self.ego_locs(parts=tuple(parts), track_idx=track_idx)[frames]
 
-        get_curvature = lambda points: SplineClass(
-            points, n_interpolants, spline_smooth
-        ).interpolate()
+        def get_curvature(points):
+            return SplineClass(
+                    points, n_interpolants, spline_smooth
+                ).interpolate()
 
         return np.stack(list(map(get_curvature, parts_positions)))
 
