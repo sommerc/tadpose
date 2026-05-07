@@ -912,7 +912,6 @@ class StrideProperties:
 
             vec.append((sig, opp_sig))
 
-
             # if sig.std() == 0 or opp_sig.std() == 0:
             #     res.append(np.nan)
             #     vec.append((np.nan, np.nan))
@@ -1008,7 +1007,7 @@ def stride_to_dataframe(
         stance_start_x_cm, stance_start_y_cm, stride_stop_x_cm, stride_stop_y_cm,
         stride_duration_sec, duty_factor, stride_length_cm.
         Optional columns (present when the corresponding argument is supplied):
-        [stride_speed_cm_s, stride_acceleration_cm_s2], [angular_vel_deg_s],
+        [stride_speed_cm_s], [angular_vel_deg_s],
         [step_length_cm, step_width_cm, step_phase],
         [xcorr, xcorr_vec, xcorr_vec_opp],
         [lat_displ_dist_<label>_cm, lat_displ_phase_<label>, lat_displ_vec_<label>],
@@ -1042,9 +1041,7 @@ def stride_to_dataframe(
 
     if part_for_speed is not None:
         rows["stride_speed_cm_s"] = sp.stride_speed(strides, part_for_speed)
-        rows["stride_acceleration_cm_s2"] = sp.stride_acceleration(
-            strides, part_for_speed
-        )
+        
 
     if parts_angular_velocity is not None:
         rows["angular_vel_deg_s"] = sp.angular_velocity(strides, parts_angular_velocity)
@@ -1060,8 +1057,7 @@ def stride_to_dataframe(
         vec, vec_opp = zip(*vecs)
         rows["xcorr"] = xcorr
         rows["xcorr_vec"] = vec
-        rows["xcorr_vec_opp"] = vec_opp  
-
+        rows["xcorr_vec_opp"] = vec_opp
 
     if parts_lat_displacement is not None:
         for label, (part, proj_part) in parts_lat_displacement.items():
@@ -1306,17 +1302,20 @@ class GaitAnalysis:
         Returns
         -------
         pd.DataFrame
-            All columns from ``compute_raw_features`` plus ``average_speed_cm_s``
-            (whole-session mean speed), ``relative_*`` body-length-normalised
+            All columns from ``compute_raw_features`` plus ``speed_mean_cm_s``,
+            ``speed_std_cm_s`` and ``time_ratio_moving``
+            (whole-session), ``relative_*`` body-length-normalised
             columns, and ``duty_factor_temporal_symmetry``.
         """
         tab = self.compute_raw_features()
 
         ### avg spped
-        tab["average_speed_cm_s"] = (
-            np.nanmean(self.mouse.speed(part=self.cfg["STRIDE_SPEED_NODE"]))
-            * self.speed_calibration_factor
-        )
+        inst_speeds = self.mouse.speed(part=self.cfg["STRIDE_SPEED_NODE"])
+        tab["speed_mean_cm_s"] = np.nanmean(inst_speeds) * self.speed_calibration_factor
+        tab["speed_std_cm_s"] = np.nanstd(inst_speeds) * self.speed_calibration_factor
+
+        ### time moving
+        tab["time_ratio_moving"] = self.mouse_is_moving_mask.sum() / len(self.mouse_is_moving_mask)
 
         ### Body length normalization
         if "stride_body_lengths_cm" in tab.columns:
@@ -1327,7 +1326,8 @@ class GaitAnalysis:
                 "step_length_cm",
                 "step_width_cm",
                 "stride_body_lengths_cm",
-                "average_speed_cm_s",
+                "speed_mean_cm_s",
+                "speed_std_cm_s",
             ]
 
             for c in tab.columns:
