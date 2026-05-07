@@ -473,15 +473,28 @@ class SleapTadpole(Tadpole):
     def acceleration(self, part, frames=None, track_idx=0, sigma=0):
         frames = self.check_frames(frames)
 
-        part_loc = self.locs(parts=(part,), track_idx=track_idx, fill_missing=False).squeeze()[frames]
-        part_disp = np.gradient(part_loc, axis=0)
-        part_disp2 = np.gradient(part_disp, axis=0)
-        acc = np.linalg.norm(part_disp2, axis=1)
-
-        if sigma > 0:
-            acc = utils.gaussian_filter1d(acc, sigma)
+        part_speed = self.speed(part=part, frames=frames, track_idx=track_idx, sigma=sigma)
+        acc = np.gradient(part_speed, axis=0)
+        # acc = np.linalg.norm(part_disp2, axis=1)
 
         return acc
+    
+    # def acceleration(self, part, frames=None, track_idx=0, sigma=0):
+    #     from scipy.signal import savgol_filter
+    #     import numpy as np
+
+    #     window = 31
+    #     poly = 3
+
+    #     points = self.locs(
+    #         parts=(part,), track_idx=track_idx, fill_missing=False
+    #     ).squeeze()
+
+    #     ax = savgol_filter(points[:, 0], window, poly, deriv=0, delta=1)
+    #     ay = savgol_filter(points[:, 1], window, poly, deriv=0, delta=1)
+
+    #     acc = np.linalg.norm(np.gradient(np.column_stack([ax, ay]), axis=0), axis=1)
+    #     return np.gradient(acc, axis=0)
 
     def angles_from_segment(self, parts, frames=None, track_idx=0, win=None):
         angles = []
