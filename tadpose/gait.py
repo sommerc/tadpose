@@ -486,7 +486,40 @@ class StrideProperties:
         for stance_start, swing_start, stride_stop in strides.strides_in_label(
             self.mask, self.min_duration
         ):
-            res.append(part_speed[stance_start:stride_stop].mean())
+            res.append(np.nanmean(part_speed[stance_start:stride_stop]))
+
+        return np.array(res)
+
+    def stride_acceleration(self, strides, part_for_acc):
+        """
+        Calculates the average acceleration of a specified body part during each stride.
+        Parameters
+        ----------
+        strides : object
+            An object that provides stride intervals via the `strides_in_label` method.
+        part_for_acc : str or int
+            The identifier for the body part whose acceleration is to be calculated.
+        Returns
+        -------
+        np.ndarray
+            An array containing the mean acceleration of the specified body part for each stride interval.
+        Notes
+        -----
+        - The acceleration is computed using the `mouse.acceleration` method, scaled by `pixel_size` and `fps`.
+        - Only stride intervals that satisfy the mask and minimum duration are considered.
+        """
+        part_acc = (
+            self.mouse.acceleration(part=part_for_acc, track_idx=self.track_idx)
+            * self.pixel_size
+            * self.fps**2
+        )
+
+        res = []
+
+        for stance_start, swing_start, stride_stop in strides.strides_in_label(
+            self.mask, self.min_duration
+        ):
+            res.append(np.nanmean(part_acc[stance_start:stride_stop]))
 
         return np.array(res)
 
@@ -540,8 +573,10 @@ class StrideProperties:
             strides_opposite: An object representing the strides of the opposite limb, containing stride frames and paw part information.
             debug_plot (int, optional): The index of the stride for which to generate a debug plot. Defaults to -1 (no plot).
         Returns:
-            np.ndarray: An array of shape (N, 2), where N is the number of strides. Each row contains
-                [step_length, step_width] for a stride. Values are in physical units (e.g., mm).
+            np.ndarray: An array of shape (N, 3), where N is the number of strides. Each row contains
+                [step_length, step_width, step_phase]. Lengths and widths are in physical units
+                (e.g., cm). Step phase is the fraction of the stride cycle (0–1) at which the
+                contralateral stance starts.
         """
         paw_locs = self.mouse.locs(
             parts=(
@@ -673,6 +708,7 @@ class StrideProperties:
             lateral displacements in pixels, one value per frame within
             the stride.
         """
+
         def cross2d(x, y):
             return x[..., 0] * y[..., 1] - x[..., 1] * y[..., 0]
 
@@ -785,9 +821,12 @@ class StrideProperties:
             sigma_pf (float, optional): Standard deviation for Gaussian smoothing of the displacement signal. Default is 3.
             debug_plot (int, optional): If non-negative, enables debug plotting for the specified stride index. Default is -1.
         Returns:
-            np.ndarray: Array of shape (N, 2), where N is the number of strides. Each row contains:
-                - Maximum lateral displacement (in physical units, e.g., microns or mm)
-                - Phase (fraction of stride, between 0 and 1) at which the maximum peak occurs
+            tuple:
+                - **np.ndarray of shape (N, 2)**: One row per stride; column 0 is the peak-to-peak
+                  lateral displacement in physical units; column 1 is the phase (0–1) of the
+                  maximum peak.
+                - **list of np.ndarray**: Raw (unscaled) per-frame displacement vectors, one 1-D
+                  array per stride.
         Notes:
             - Uses Gaussian smoothing to reduce noise in the displacement signal.
             - The phase is computed relative to a normalized stride duration.
@@ -799,6 +838,7 @@ class StrideProperties:
 
         phase = []
         displ = []
+        raw_vec = []
         for k, v in rld.items():
             displ.append(v.max() - v.min())
             x = np.linspace(0, 1, 100)
@@ -813,10 +853,11 @@ class StrideProperties:
                 i_max_peak = i_peaks[np.argmax(sy[i_peaks])]
 
             phase.append(i_max_peak)
+            raw_vec.append(v)
 
         return np.stack(
             (np.array(displ) * self.pixel_size, np.array(phase) / 100), axis=-1
-        )
+        ), raw_vec
 
     def stride_x_corr(self, strides, xcorr_part, debug_plot=1):
         """
@@ -839,9 +880,11 @@ class StrideProperties:
 
         Returns
         -------
-        np.ndarray of shape (N,)
-            Pearson correlation coefficient for each stride (``nan`` for
-            strides that could not be computed).
+        tuple
+            - **np.ndarray of shape (N,)** : Pearson correlation coefficient for each stride
+              (``nan`` for strides that could not be computed).
+            - **list of tuple** : Raw signal pairs ``(sig, opp_sig)`` for each stride, where each
+              element is a pair of 1-D arrays (z-scored paw signal and z-scored partner signal).
         """
         strides_frames = strides.strides_in_label(self.mask, self.min_duration)
 
@@ -855,19 +898,25 @@ class StrideProperties:
         )
 
         res = []
+        vec = []
         for stride_ix, (stance_start, swing_start, stride_end) in enumerate(
             strides_frames
         ):
-            if swing_start - stance_start < 2:
-                res.append(np.nan)
-                continue
+            # if swing_start - stance_start < 2:
+            #     res.append(np.nan)
+            #     vec.append((np.nan, np.nan))
+            #     continue
 
             sig = xcorr_ego_locs[stance_start:stride_end, 0, 1]
             opp_sig = xcorr_ego_locs[stance_start:stride_end, 1, 1]
 
-            if sig.std() == 0 or opp_sig.std() == 0:
-                res.append(np.nan)
-                continue
+            vec.append((sig, opp_sig))
+
+
+            # if sig.std() == 0 or opp_sig.std() == 0:
+            #     res.append(np.nan)
+            #     vec.append((np.nan, np.nan))
+            #     continue
 
             sig = (sig - sig.mean()) / sig.std()
             opp_sig = (opp_sig - opp_sig.mean()) / opp_sig.std()
@@ -908,7 +957,7 @@ class StrideProperties:
 
                 ax.legend()
 
-        return np.array(res)
+        return np.array(res), vec
 
 
 def stride_to_dataframe(
@@ -947,16 +996,23 @@ def stride_to_dataframe(
         e.g. ``{"Nose": ("Nose", "Spine_Center"), "Tail_base": ("Tail_Base", "Spine_Center")}``.
     part_xcorr : str, optional
         Body part to cross-correlate the paw signal against.
+    parts_body_size : tuple of str, optional
+        Two body-part names (e.g. ``("Neck_Base", "Tail_Base")``) whose mean distance
+        is stored as ``stride_body_lengths_cm`` for body-length normalisation.
 
     Returns
     -------
     pd.DataFrame
-        Columns: video_fn, paw, stride_type, stance_start_frame, swing_start_frame,
-        stride_stop_frame, stance_start_sec, stride_duration_sec, duty_factor,
+        Always-present columns: Video_fn, Track_idx, Stride_type, Paw,
+        stance_start_frame, swing_start_frame, stride_stop_frame,
         stance_start_x_cm, stance_start_y_cm, stride_stop_x_cm, stride_stop_y_cm,
-        stride_length_cm, [stride_speed_cm_s], [angular_vel_deg_s],
-        [step_length_cm, step_width_cm, step_phase], [xcorr],
-        [lat_displ_dist_<label>_cm, lat_displ_phase_<label>].
+        stride_duration_sec, duty_factor, stride_length_cm.
+        Optional columns (present when the corresponding argument is supplied):
+        [stride_speed_cm_s, stride_acceleration_cm_s2], [angular_vel_deg_s],
+        [step_length_cm, step_width_cm, step_phase],
+        [xcorr, xcorr_vec, xcorr_vec_opp],
+        [lat_displ_dist_<label>_cm, lat_displ_phase_<label>, lat_displ_vec_<label>],
+        [stride_body_lengths_cm].
     """
     stride_frames = strides.strides_in_label(sp.mask, sp.min_duration)
 
@@ -986,6 +1042,9 @@ def stride_to_dataframe(
 
     if part_for_speed is not None:
         rows["stride_speed_cm_s"] = sp.stride_speed(strides, part_for_speed)
+        rows["stride_acceleration_cm_s2"] = sp.stride_acceleration(
+            strides, part_for_speed
+        )
 
     if parts_angular_velocity is not None:
         rows["angular_vel_deg_s"] = sp.angular_velocity(strides, parts_angular_velocity)
@@ -997,18 +1056,24 @@ def stride_to_dataframe(
         rows["step_phase"] = step[:, 2]
 
     if part_xcorr is not None:
-        rows["xcorr"] = sp.stride_x_corr(strides, part_xcorr, debug_plot=-1)
+        xcorr, vecs = sp.stride_x_corr(strides, part_xcorr, debug_plot=-1)
+        vec, vec_opp = zip(*vecs)
+        rows["xcorr"] = xcorr
+        rows["xcorr_vec"] = vec
+        rows["xcorr_vec_opp"] = vec_opp  
+
 
     if parts_lat_displacement is not None:
         for label, (part, proj_part) in parts_lat_displacement.items():
-            ld = sp.lateral_displacements_metrics(
+            ld, raw = sp.lateral_displacements_metrics(
                 strides, part, proj_part, debug_plot=-1
             )
             rows[f"lat_displ_dist_{label}_cm"] = ld[:, 0]
             rows[f"lat_displ_phase_{label}"] = ld[:, 1]
+            rows[f"lat_displ_vec_{label}"] = raw
 
     if parts_body_size is not None:
-        rows["stride_body_lengths_cm"] = sp.distance(strides, *parts_body_size) 
+        rows["stride_body_lengths_cm"] = sp.distance(strides, *parts_body_size)
 
     return pd.DataFrame(rows)
 
@@ -1241,10 +1306,17 @@ class GaitAnalysis:
         Returns
         -------
         pd.DataFrame
-            All columns from ``compute_raw_features`` plus ``relative_*``
-            normalised columns and ``duty_factor_temporal_symmetry``.
+            All columns from ``compute_raw_features`` plus ``average_speed_cm_s``
+            (whole-session mean speed), ``relative_*`` body-length-normalised
+            columns, and ``duty_factor_temporal_symmetry``.
         """
         tab = self.compute_raw_features()
+
+        ### avg spped
+        tab["average_speed_cm_s"] = (
+            np.nanmean(self.mouse.speed(part=self.cfg["STRIDE_SPEED_NODE"]))
+            * self.speed_calibration_factor
+        )
 
         ### Body length normalization
         if "stride_body_lengths_cm" in tab.columns:
@@ -1254,7 +1326,8 @@ class GaitAnalysis:
                 "stride_speed_cm_s",
                 "step_length_cm",
                 "step_width_cm",
-                "stride_body_lengths_cm"
+                "stride_body_lengths_cm",
+                "average_speed_cm_s",
             ]
 
             for c in tab.columns:
@@ -1263,10 +1336,9 @@ class GaitAnalysis:
 
             for col in cols_to_norm:
                 if col in tab.columns:
-
                     tab[f"relative_{col.replace('_cm', '')}"] = tab[col] / body_length
 
-        # temporal symmetry for duty factor
+        ### temporal symmetry for duty factor
 
         stride_types = tab.Stride_type.unique()
 
@@ -1274,9 +1346,8 @@ class GaitAnalysis:
         for st in stride_types:
             l_dtf, r_dtf = tab.groupby(["Stride_type", "Paw"]).duty_factor.mean()[st]
             temp_symm_per_st = (l_dtf - r_dtf) / (0.5 * (l_dtf + r_dtf))
-            tab.loc[tab.Stride_type == st, "duty_factor_temporal_symmetry"] = temp_symm_per_st
-
+            tab.loc[tab.Stride_type == st, "duty_factor_temporal_symmetry"] = (
+                temp_symm_per_st
+            )
 
         return tab
-
-
